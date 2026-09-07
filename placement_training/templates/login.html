@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Student Login{% endblock %}
+{% block content %}
+<div class="row justify-content-center align-items-center" style="min-height: calc(100vh - 120px);">
+    <div class="col-md-5">
+        <div class="card border-0 rounded-4">
+            <div class="card-body p-5">
+                <h3 class="text-center mb-4" style="font-weight: 800; letter-spacing: 0.5px;">Student Login</h3>
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" name="email" class="form-control" placeholder="Enter your email" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password" class="form-control" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2">Login</button>
+                    <div class="text-center mt-4">
+                        <p style="color: var(--text-secondary);">Don't have an account? <a href="{{ url_for('auth.student_register') }}" style="color: var(--neon-cyan); font-weight: 600;">Create one</a></p>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

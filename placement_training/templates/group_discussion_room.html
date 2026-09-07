@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+{% block title %}Group Discussion Room{% endblock %}
+{% block content %}
+<div class="container-fluid mt-4" style="max-width: 100%;">
+    <div class="row g-4">
+        <!-- Main Discussion Area -->
+        <div class="col-lg-8">
+            <div class="card border-0 p-4" style="background: var(--card-bg); height: 600px; display: flex; flex-direction: column;">
+                <div class="mb-4">
+                    <h3 style="color: var(--text-primary); font-weight: 700;">{{ session.topic }}</h3>
+                    <p style="color: var(--text-secondary);">{{ session.description }}</p>
+                </div>
+
+                <!-- Video/Audio Container -->
+                <div class="flex-grow-1 mb-3 p-4 rounded" style="background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; border: 2px dashed var(--border-color);">
+                    <div class="text-center">
+                        <h5 style="color: var(--text-secondary); margin-bottom: 20px;">Voice Conference Area</h5>
+                        <div id="participant-videos" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; width: 100%;">
+                            <!-- Participant video elements will be added here via JS -->
+                            <div class="participant-placeholder p-3 rounded" style="background: var(--card-bg); text-align: center;">
+                                <div style="width: 100%; height: 100px; background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;">
+                                    {{ current_user.name }}
+                                </div>
+                                <p style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 8px;">You</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="d-flex justify-content-center gap-2">
+                    <button class="btn btn-primary" id="mic-btn" onclick="toggleMicrophone()">
+                        🎤 Microphone On
+                    </button>
+                    <button class="btn btn-secondary" id="speaker-btn" onclick="toggleSpeaker()">
+                        🔊 Speaker On
+                    </button>
+                    <button class="btn btn-danger" id="leave-btn" onclick="leaveDiscussion()">
+                        🚪 Leave Discussion
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar -->
+        <div class="col-lg-4">
+            <!-- Participants List -->
+            <div class="card border-0 p-4 mb-4" style="background: var(--card-bg);">
+                <h5 style="color: var(--text-primary); font-weight: 700; margin-bottom: 20px;">Participants ({{ participants|length }})</h5>
+                <div id="participants-list">
+                    {% for participant in participants %}
+                    <div class="participant-item d-flex align-items-center mb-3 p-2 rounded" style="background: var(--bg-secondary);">
+                        <div class="rounded-circle me-3" style="width: 40px; height: 40px; background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 0.8rem;">
+                            {{ participant.name[0] }}
+                        </div>
+                        <div>
+                            <p style="color: var(--text-primary); margin: 0; font-weight: 600;">{{ participant.name }}</p>
+                            <p style="color: var(--text-secondary); margin: 0; font-size: 0.8rem;">
+                                {% if participant.id == current_user.id %}
+                                <span style="color: var(--neon-cyan);">🟢 You</span>
+                                {% else %}
+                                <span>🔵 Active</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Discussion Info -->
+            <div class="card border-0 p-4" style="background: var(--card-bg);">
+                <h5 style="color: var(--text-primary); font-weight: 700; margin-bottom: 20px;">Session Info</h5>
+                <div class="mb-3">
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 8px;"><strong>Company:</strong></p>
+                    <p style="color: var(--text-primary); font-weight: 600;">{{ session.company.name if session.company else 'General' }}</p>
+                </div>
+                <div class="mb-3">
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 8px;"><strong>Duration:</strong></p>
+                    <p style="color: var(--text-primary); font-weight: 600;">{{ session.duration_minutes }} minutes</p>
+                </div>
+                <div>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 8px;"><strong>Status:</strong></p>
+                    <p style="color: #28a745; font-weight: 600;">🟢 In Progress</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Evaluation Modal (shown at end) -->
+    <div class="modal fade" id="evaluationModal" tabindex="-1" aria-labelledby="evaluationLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" style="background: var(--card-bg); border: none;">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                    <h5 class="modal-title" id="evaluationLabel">Discussion Performance Evaluation</h5>
+                </div>
+                <div class="modal-body">
+                    <form id="evaluation-form">
+                        <div class="mb-4">
+                            <label style="color: var(--text-primary); font-weight: 600;">Communication Skills (0-100)</label>
+                            <input type="range" class="form-range" min="0" max="100" value="50" id="communication-score" oninput="updateScore('communication')">
+                            <small style="color: var(--text-secondary); display: block; margin-top: 5px;"><span id="communication-val">50</span>/100</small>
+                        </div>
+                        <div class="mb-4">
+                            <label style="color: var(--text-primary); font-weight: 600;">Participation Level (0-100)</label>
+                            <input type="range" class="form-range" min="0" max="100" value="50" id="participation-score" oninput="updateScore('participation')">
+                            <small style="color: var(--text-secondary); display: block; margin-top: 5px;"><span id="participation-val">50</span>/100</small>
+                        </div>
+                        <div class="mb-4">
+                            <label style="color: var(--text-primary); font-weight: 600;">Relevance of Points (0-100)</label>
+                            <input type="range" class="form-range" min="0" max="100" value="50" id="relevance-score" oninput="updateScore('relevance')">
+                            <small style="color: var(--text-secondary); display: block; margin-top: 5px;"><span id="relevance-val">50</span>/100</small>
+                        </div>
+                        <div class="mb-4">
+                            <label style="color: var(--text-primary); font-weight: 600;">Confidence (0-100)</label>
+                            <input type="range" class="form-range" min="0" max="100" value="50" id="confidence-score" oninput="updateScore('confidence')">
+                            <small style="color: var(--text-secondary); display: block; margin-top: 5px;"><span id="confidence-val">50</span>/100</small>
+                        </div>
+                        <div class="mb-4">
+                            <label style="color: var(--text-primary); font-weight: 600;">Listening / Response Ability (0-100)</label>
+                            <input type="range" class="form-range" min="0" max="100" value="50" id="listening-score" oninput="updateScore('listening')">
+                            <small style="color: var(--text-secondary); display: block; margin-top: 5px;"><span id="listening-val">50</span>/100</small>
+                        </div>
+                        <div class="mb-4">
+                            <label style="color: var(--text-primary); font-weight: 600;">Team Interaction (0-100)</label>
+                            <input type="range" class="form-range" min="0" max="100" value="50" id="team_interaction-score" oninput="updateScore('team_interaction')">
+                            <small style="color: var(--text-secondary); display: block; margin-top: 5px;"><span id="team_interaction-val">50</span>/100</small>
+                        </div>
+                        <div class="mb-4">
+                            <label style="color: var(--text-primary); font-weight: 600;">Feedback (Optional)</label>
+                            <textarea class="form-control" id="feedback-text" rows="4" style="background: var(--bg-secondary); border: none; color: var(--text-primary);" placeholder="Enter your feedback here..."></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="submitEvaluation()">Submit Evaluation</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let microphoneOn = true;
+let speakerOn = true;
+
+function toggleMicrophone() {
+    microphoneOn = !microphoneOn;
+    const btn = document.getElementById('mic-btn');
+    btn.textContent = microphoneOn ? '🎤 Microphone On' : '🎤 Microphone Off';
+    btn.className = microphoneOn ? 'btn btn-primary' : 'btn btn-danger';
+}
+
+function toggleSpeaker() {
+    speakerOn = !speakerOn;
+    const btn = document.getElementById('speaker-btn');
+    btn.textContent = speakerOn ? '🔊 Speaker On' : '🔊 Speaker Off';
+    btn.className = speakerOn ? 'btn btn-secondary' : 'btn btn-danger';
+}
+
+function leaveDiscussion() {
+    if (confirm('Are you sure you want to leave the discussion?')) {
+        document.getElementById('evaluation-form').reset();
+        new bootstrap.Modal(document.getElementById('evaluationModal')).show();
+    }
+}
+
+function updateScore(field) {
+    const value = document.getElementById(field + '-score').value;
+    document.getElementById(field + '-val').textContent = value;
+}
+
+function submitEvaluation() {
+    const evaluationData = {
+        communication: parseFloat(document.getElementById('communication-score').value),
+        participation: parseFloat(document.getElementById('participation-score').value),
+        relevance: parseFloat(document.getElementById('relevance-score').value),
+        confidence: parseFloat(document.getElementById('confidence-score').value),
+        listening: parseFloat(document.getElementById('listening-score').value),
+        team_interaction: parseFloat(document.getElementById('team_interaction-score').value),
+        feedback: document.getElementById('feedback-text').value
+    };
+
+    fetch('{{ url_for('student.submit_discussion_evaluation', session_id=session.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(evaluationData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Evaluation submitted successfully!');
+            window.location.href = '{{ url_for('student.dashboard') }}';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error submitting evaluation.');
+    });
+}
+
+// Request microphone permission on page load
+window.addEventListener('load', async () => {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('Microphone access granted');
+    } catch (err) {
+        console.error('Microphone access denied:', err);
+        alert('Please allow microphone access for group discussion');
+    }
+});
+</script>
+
+<style>
+    .participant-item {
+        transition: all 0.3s ease;
+    }
+
+    .participant-item:hover {
+        background: linear-gradient(135deg, rgba(66, 184, 221, 0.1), rgba(76, 209, 180, 0.1)) !important;
+    }
+
+    input[type="range"] {
+        height: 6px;
+        border-radius: 3px;
+        background: linear-gradient(to right, #ff6b6b, #feca57, #48dbfb, #1dd1a1);
+        outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan));
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan));
+        cursor: pointer;
+        border: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+</style>
+{% endblock %}

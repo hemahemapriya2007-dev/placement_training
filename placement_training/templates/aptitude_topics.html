@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Aptitude Topics{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-5">
+        <h2 style="color: var(--text-primary); font-weight: 700;">Aptitude Practice</h2>
+        <p style="color: var(--text-secondary);">Select a topic to practice or take the general aptitude test</p>
+    </div>
+
+    <!-- General Aptitude Test Card -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-4">
+            <div class="card border-0 p-4 topic-card" style="background: linear-gradient(135deg, #ff6b6b, #ff8787); cursor: pointer;" onclick="window.location.href='{{ url_for('student.general_aptitude_test') }}'">
+                <div class="card-body text-center">
+                    <h5 style="color: white; font-weight: 700; margin-bottom: 10px;">General Aptitude Test</h5>
+                    <p style="color: rgba(255,255,255,0.9); font-size: 0.9rem;">10 Questions • Mixed Topics</p>
+                    <button class="btn btn-light btn-sm mt-3">Start Test</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Topic Cards -->
+    <div class="row g-4">
+        {% for topic, description in topics %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card border-0 p-4 topic-card" style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)); cursor: pointer; transition: transform 0.3s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'" onclick="window.location.href='{{ url_for('student.aptitude_topic_test', topic_name=topic, company_id=company.id if company else None) }}'">
+                <div class="card-body">
+                    <h5 style="color: white; font-weight: 700; margin-bottom: 10px;">{{ topic }}</h5>
+                    <p style="color: rgba(255,255,255,0.9); font-size: 0.85rem; margin-bottom: 15px;">{{ description }}</p>
+                    <p style="color: rgba(255,255,255,0.8); font-size: 0.8rem; margin-bottom: 10px;">5 Questions • 10 minutes</p>
+                    <button class="btn btn-light btn-sm">Practice Now</button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="mt-5 mb-5">
+        <a href="{{ url_for('student.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+</div>
+
+<style>
+    .topic-card {
+        border-radius: 10px !important;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        transition: all 0.3s ease;
+    }
+    
+    .topic-card:hover {
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    }
+</style>
+{% endblock %}

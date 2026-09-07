@@ -1,0 +1,285 @@
+{% extends 'base.html' %}
+{% block title %}{{ topic_name }} Test{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 style="color: var(--text-primary); font-weight: 700;">{{ topic_name }} Test</h2>
+            <div style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: 700;">
+                Question <span id="current-question">1</span> of {{ total_questions }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="progress mb-4" style="height: 8px;">
+        <div class="progress-bar" id="progress-bar" style="width: 0%; background: linear-gradient(90deg, var(--neon-blue), var(--neon-cyan));"></div>
+    </div>
+
+    <form id="test-form">
+        {% for index in range(questions|length) %}
+        {% set question = questions[index] %}
+        <div class="question-container mb-4 p-4 rounded border-0" style="background: var(--card-bg); display: {% if index == 0 %}block{% else %}none{% endif %};" id="question-{{ index }}">
+            <div class="mb-3">
+                <h5 style="color: var(--text-primary); font-weight: 600;">{{ question['question'] }}</h5>
+            </div>
+
+            <div class="options mb-3">
+                <div class="option mb-2" onclick="selectAnswer({{ index }}, 'A')">
+                    <input type="radio" name="answer-{{ index }}" value="A" id="q{{ index }}-a">
+                    <label for="q{{ index }}-a" style="margin: 0; cursor: pointer; padding: 12px; display: block; border-radius: 8px; border: 2px solid var(--text-muted);" class="option-label">
+                        <strong>A)</strong> {{ question['options'][0] }}
+                    </label>
+                </div>
+                <div class="option mb-2" onclick="selectAnswer({{ index }}, 'B')">
+                    <input type="radio" name="answer-{{ index }}" value="B" id="q{{ index }}-b">
+                    <label for="q{{ index }}-b" style="margin: 0; cursor: pointer; padding: 12px; display: block; border-radius: 8px; border: 2px solid var(--text-muted);" class="option-label">
+                        <strong>B)</strong> {{ question['options'][1] }}
+                    </label>
+                </div>
+                <div class="option mb-2" onclick="selectAnswer({{ index }}, 'C')">
+                    <input type="radio" name="answer-{{ index }}" value="C" id="q{{ index }}-c">
+                    <label for="q{{ index }}-c" style="margin: 0; cursor: pointer; padding: 12px; display: block; border-radius: 8px; border: 2px solid var(--text-muted);" class="option-label">
+                        <strong>C)</strong> {{ question['options'][2] }}
+                    </label>
+                </div>
+                <div class="option mb-2" onclick="selectAnswer({{ index }}, 'D')">
+                    <input type="radio" name="answer-{{ index }}" value="D" id="q{{ index }}-d">
+                    <label for="q{{ index }}-d" style="margin: 0; cursor: pointer; padding: 12px; display: block; border-radius: 8px; border: 2px solid var(--text-muted);" class="option-label">
+                        <strong>D)</strong> {{ question['options'][3] }}
+                    </label>
+                </div>
+            </div>
+
+            <!-- Feedback Section -->
+            <div id="feedback-{{ index }}" style="display: none;" class="feedback mt-4 p-3 rounded">
+                <div id="feedback-result-{{ index }}" class="mb-2"></div>
+                <div id="feedback-explanation-{{ index }}" class="mb-2"></div>
+                <div id="feedback-concept-{{ index }}" class="mt-3 p-2 rounded" style="background: var(--bg-secondary);"></div>
+            </div>
+
+            <!-- Navigation Buttons -->
+            <div class="d-flex justify-content-between mt-4">
+                <div></div>
+                
+                <button type="button" class="btn btn-primary" id="next-btn-{{ index }}" onclick="nextQuestion({{ index }})" {% if index == 0 %}disabled{% endif %} style="display: {% if index == total_questions - 1 %}none{% endif %};">Next Question →</button>
+                
+                <button type="button" class="btn btn-success" id="submit-btn-{{ index }}" onclick="submitTest()" style="display: {% if index == total_questions - 1 %}inline-block{% else %}none{% endif %}; display: none;">Submit Test</button>
+            </div>
+        </div>
+        {% endfor %}
+    </form>
+
+    <!-- Results Modal -->
+    <div class="modal fade" id="resultsModal" tabindex="-1" aria-labelledby="resultsLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content" style="background: var(--card-bg); border: none;">
+                <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+                    <h5 class="modal-title" id="resultsLabel">Test Results</h5>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-4">
+                        <h3 id="result-percentage" style="color: var(--neon-cyan); font-weight: 700;">0%</h3>
+                        <div id="result-chart" style="width: 140px; height: 140px; border-radius: 50%; margin: 1rem auto; background: conic-gradient(#28a745 0deg, #dc3545 0deg);"></div>
+                        <p id="result-ratio" style="color: var(--text-secondary);">0 / 0 Correct</p>
+                        <p id="result-performance" style="color: var(--text-primary); font-weight: 700;">Performance Level: -</p>
+                    </div>
+                    <div class="row text-center mb-3">
+                        <div class="col-6 mb-3">
+                            <p style="color: var(--text-secondary); font-size: 0.85rem;">Total Questions</p>
+                            <h4 id="result-total" style="color: var(--text-primary); font-weight: 600;">0</h4>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <p style="color: var(--text-secondary); font-size: 0.85rem;">Correct</p>
+                            <h4 id="result-correct" style="color: #28a745; font-weight: 600;">0</h4>
+                        </div>
+                        <div class="col-6">
+                            <p style="color: var(--text-secondary); font-size: 0.85rem;">Wrong</p>
+                            <h4 id="result-wrong" style="color: #dc3545; font-weight: 600;">0</h4>
+                        </div>
+                        <div class="col-6">
+                            <p style="color: var(--text-secondary); font-size: 0.85rem;">Score</p>
+                            <h4 id="result-score" style="color: var(--neon-blue); font-weight: 600;">0/0</h4>
+                        </div>
+                    </div>
+                    <p id="result-status" style="color: var(--text-secondary); text-align: center; margin-top: 15px;">Completed</p>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-primary" onclick="window.location.href='{{ url_for('student.aptitude_topics_list') }}'">Back to Topics</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentQuestion = 0;
+const totalQuestions = {{ total_questions }};
+let answers = {};
+
+function selectAnswer(questionIndex, answer) {
+    const selectedInput = document.getElementById(`q${questionIndex}-${answer.toLowerCase()}`);
+    if (selectedInput.disabled) return;
+    selectedInput.checked = true;
+    answers[questionIndex] = answer;
+    
+    // Show feedback after selection
+    setTimeout(() => {
+        showFeedback(questionIndex);
+    }, 300);
+}
+
+function showFeedback(questionIndex) {
+    const selectedAnswer = answers[questionIndex];
+    const feedbackDiv = document.getElementById(`feedback-${questionIndex}`);
+    const resultDiv = document.getElementById(`feedback-result-${questionIndex}`);
+    const explanationDiv = document.getElementById(`feedback-explanation-${questionIndex}`);
+    const conceptDiv = document.getElementById(`feedback-concept-${questionIndex}`);
+    
+    const questions = {{ questions | tojson }};
+    const question = questions[questionIndex];
+    const correctAnswer = question.correct_answer;
+    
+    if (selectedAnswer === correctAnswer) {
+        resultDiv.innerHTML = '<span style="color: #28a745; font-weight: 700; font-size: 1.1rem;">✓ Correct!</span>';
+    } else {
+        resultDiv.innerHTML = '<span style="color: #dc3545; font-weight: 700; font-size: 1.1rem;">✗ Wrong</span>';
+    }
+    
+    explanationDiv.innerHTML = `<strong>Correct Answer:</strong> ${correctAnswer}<br><strong>Explanation:</strong> ${question.explanation}`;
+    conceptDiv.innerHTML = `<strong>Concept:</strong> ${question.concept}`;
+    
+    feedbackDiv.style.display = 'block';
+    document.querySelectorAll(`input[name="answer-${questionIndex}"]`).forEach(input => input.disabled = true);
+    
+    // Enable next button
+    const nextBtn = document.getElementById(`next-btn-${questionIndex}`);
+    if (nextBtn) nextBtn.disabled = false;
+}
+
+function nextQuestion(index) {
+    if (!answers.hasOwnProperty(index)) {
+        alert('Please select an answer before proceeding.');
+        return;
+    }
+    
+    currentQuestion = index + 1;
+    updateProgressBar();
+    showQuestion(currentQuestion);
+}
+
+function previousQuestion(index) {
+    if (index > 0) {
+        currentQuestion = index - 1;
+        updateProgressBar();
+        showQuestion(currentQuestion);
+    }
+}
+
+function showQuestion(index) {
+    document.querySelectorAll('.question-container').forEach((el, idx) => {
+        el.style.display = idx === index ? 'block' : 'none';
+    });
+    
+    const nextBtns = document.querySelectorAll('[id^="next-btn-"]');
+    const submitBtns = document.querySelectorAll('[id^="submit-btn-"]');
+    
+    nextBtns.forEach((btn, idx) => {
+        btn.style.display = idx === index && index < totalQuestions - 1 ? 'inline-block' : 'none';
+    });
+    
+    submitBtns.forEach((btn, idx) => {
+        btn.style.display = idx === index && index === totalQuestions - 1 ? 'inline-block' : 'none';
+    });
+    
+    document.getElementById('current-question').textContent = index + 1;
+}
+
+function updateProgressBar() {
+    const progress = ((currentQuestion + 1) / totalQuestions) * 100;
+    document.getElementById('progress-bar').style.width = progress + '%';
+}
+
+function submitTest() {
+    const questions = {{ questions | tojson }};
+    
+    // Prepare answers data with correct answers for validation
+    const submissionData = {
+        answers: answers,
+        questions: questions.map((q, idx) => ({
+            correct_answer: q.correct_answer
+        }))
+    };
+    
+    fetch('{{ url_for('student.submit_aptitude_topic', topic_name=topic_name) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            answers: answers,
+            questions: questions,
+            company_id: {{ company.id if company else 'null' }}
+        })
+    })
+    .then(response => response.json().then(data => ({ ok: response.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok || !data.success) throw new Error(data.message || 'Submission failed');
+            document.getElementById('result-total').textContent = data.total;
+            document.getElementById('result-correct').textContent = data.correct;
+            document.getElementById('result-wrong').textContent = data.wrong;
+            document.getElementById('result-score').textContent = `${data.score}/${data.total}`;
+            document.getElementById('result-percentage').textContent = `${data.percentage}%`;
+            document.getElementById('result-ratio').textContent = `${data.correct} / ${data.total} Correct`;
+            document.getElementById('result-performance').textContent = `Performance Level: ${data.performance}`;
+            document.getElementById('result-chart').style.background = `conic-gradient(#28a745 0deg ${data.correct / data.total * 360}deg, #dc3545 ${data.correct / data.total * 360}deg 360deg)`;
+            
+            new bootstrap.Modal(document.getElementById('resultsModal')).show();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error submitting test. Please try again.');
+    });
+}
+
+// Initialize
+updateProgressBar();
+</script>
+
+<style>
+    .question-container {
+        animation: fadeIn 0.3s ease-in;
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .option-label:hover {
+        background: var(--bg-secondary) !important;
+        border-color: var(--neon-cyan) !important;
+    }
+    
+    input[type="radio"]:checked + label {
+        background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)) !important;
+        color: white !important;
+        border-color: var(--neon-cyan) !important;
+    }
+    
+    input[type="radio"] {
+        display: none;
+    }
+    
+    .feedback {
+        background: linear-gradient(135deg, rgba(40, 167, 69, 0.1), rgba(52, 211, 153, 0.1));
+        border-left: 4px solid #28a745;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Skill Form{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <h2 style="font-weight: 800; letter-spacing: 0.5px; color: var(--text-primary); margin-bottom: 0.5rem;">{{ skill.name if skill else 'Create New Skill' }}</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 2rem;">{{ 'Edit skill details' if skill else 'Add a new technical skill' }}</p>
+
+        <div class="card border-0 p-4">
+            <form method="post">
+                <div class="mb-3">
+                    <label class="form-label">Skill Name</label>
+                    <input name="name" class="form-control" placeholder="e.g., Python, JavaScript, React" value="{{ skill.name if skill else '' }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Category</label>
+                    <input name="category" class="form-control" placeholder="e.g., Programming, Web Development, Database" value="{{ skill.category if skill else '' }}">
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-control" placeholder="Skill overview and learning resources" rows="4">{{ skill.description if skill else '' }}</textarea>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <button type="submit" class="btn btn-primary px-4">{{ 'Update' if skill else 'Create' }} Skill</button>
+                    <a href="{{ url_for('admin.skills') }}" class="btn btn-secondary px-4">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

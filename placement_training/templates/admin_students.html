@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Admin - Students{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h2 style="font-weight: 800; color: var(--text-primary);">Registered Students</h2>
+    <p style="color: var(--text-secondary);">Student records from the placement database</p>
+</div>
+<div class="card border-0 p-4">
+    <div style="overflow-x: auto;">
+        <table class="table">
+            <thead><tr><th>Name</th><th>Email</th><th>Target Company</th><th>Registration Date</th></tr></thead>
+            <tbody>
+                {% for student in students %}
+                <tr>
+                    <td><a href="{{ url_for('admin.student_detail', student_id=student.id) }}" style="color: var(--neon-cyan); font-weight: 600; text-decoration: none;">{{ student.name }}</a></td>
+                    <td style="color: var(--text-secondary);">{{ student.email }}</td>
+                    <td style="color: var(--text-secondary);">{{ student.dream_company.name if student.dream_company else 'Not selected' }}</td>
+                    <td style="color: var(--text-secondary);">{{ student.created_at.strftime('%d %b %Y') if student.created_at else 'N/A' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="color: var(--text-muted);">No registered students found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

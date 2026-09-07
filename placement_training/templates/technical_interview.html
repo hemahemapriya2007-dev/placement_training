@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}{{ company.name }} Technical Interview{% endblock %}
+{% block content %}
+<section class="technical-page">
+    <a class="technical-back" href="{{ url_for('student.company_selection') }}">&larr; Companies</a>
+    <div class="technical-kicker">{{ company.name }} / interview preparation</div>
+    <h1>Technical Interview <span>Questions</span></h1>
+    <p class="technical-intro">A rotating set of technical questions aligned to {{ company.name }} hiring patterns.</p>
+    <div class="technical-grid">
+        {% for category, items in questions.items() %}
+        <section class="technical-category"><div class="technical-category-title"><span>{{ '%02d'|format(loop.index) }}</span><h2>{{ category }}</h2></div>{% for question in items %}<article class="technical-question"><span>Q{{ loop.index }}</span><p>{{ question }}</p></article>{% endfor %}</section>
+        {% endfor %}
+    </div>
+</section>
+<style>
+.technical-page{max-width:940px;margin:0 auto}.technical-back{color:var(--neon-cyan);text-decoration:none}.technical-kicker{color:var(--neon-cyan);font-size:.72rem;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-top:1rem}.technical-page h1{color:var(--text-primary);font-weight:800;margin:.55rem 0}.technical-page h1 span{color:var(--neon-cyan)}.technical-intro{color:var(--text-secondary)}.technical-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin-top:1.6rem}.technical-category{padding:1.35rem;border:1px solid rgba(0,217,255,.2);border-radius:12px;background:linear-gradient(145deg,rgba(16,22,42,.84),rgba(8,10,22,.76));box-shadow:0 12px 32px rgba(0,0,0,.35)}.technical-category-title{display:flex;align-items:center;gap:.7rem;margin-bottom:1rem}.technical-category-title>span{color:var(--neon-cyan);font-size:.75rem;font-weight:800}.technical-category h2{color:var(--text-primary);font-size:1.1rem;margin:0}.technical-question{display:flex;gap:.8rem;padding:.75rem 0;border-top:1px solid rgba(255,255,255,.1)}.technical-question span{color:var(--neon-cyan);font-size:.75rem;font-weight:800}.technical-question p{color:var(--text-secondary);margin:0;line-height:1.45}@media(max-width:650px){.technical-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}

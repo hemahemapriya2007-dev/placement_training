@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Group Discussion Sessions{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-5">
+        <h2 style="color: var(--text-primary); font-weight: 700;">Group Discussion Sessions</h2>
+        <p style="color: var(--text-secondary);">Join a group discussion to practice communication and presentation skills</p>
+    </div>
+
+    {% if sessions %}
+    <div class="row g-4">
+        {% for session in sessions %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card border-0 p-4" style="background: var(--card-bg); border-radius: 10px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);">
+                <div class="mb-3">
+                    <h5 style="color: var(--text-primary); font-weight: 700;">{{ session.topic }}</h5>
+                    {% if session.company %}
+                    <p style="color: var(--neon-cyan); font-weight: 600; font-size: 0.9rem;">{{ session.company.name }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="mb-3">
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 8px;">
+                        <strong>Duration:</strong> {{ session.duration_minutes }} minutes
+                    </p>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 8px;">
+                        <strong>Status:</strong> 
+                        {% if session.status == 'scheduled' %}
+                        <span style="color: #ffc107;">🔵 Scheduled</span>
+                        {% elif session.status == 'in_progress' %}
+                        <span style="color: #28a745;">🟢 In Progress</span>
+                        {% else %}
+                        <span style="color: #6c757d;">⚪ Completed</span>
+                        {% endif %}
+                    </p>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem;">
+                        <strong>Participants:</strong> {{ session.participants|length }} / {{ session.max_participants }}
+                    </p>
+                </div>
+
+                {% if session.description %}
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 15px;">{{ session.description[:100] }}...</p>
+                {% endif %}
+
+                <button class="btn btn-primary btn-sm w-100" onclick="window.location.href='{{ url_for('student.join_group_discussion', session_id=session.id) }}'">Join Discussion</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info" role="alert">
+        <h4 class="alert-heading">No active sessions</h4>
+        <p>There are currently no available group discussion sessions. Check back later for new sessions!</p>
+    </div>
+    {% endif %}
+
+    <div class="mt-5">
+        <a href="{{ url_for('student.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}

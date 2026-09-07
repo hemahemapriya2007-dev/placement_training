@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Company Form{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <h2 style="font-weight: 800; letter-spacing: 0.5px; color: var(--text-primary); margin-bottom: 0.5rem;">{{ company.name if company else 'Create New Company' }}</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 2rem;">{{ 'Edit company details' if company else 'Add a new company to the system' }}</p>
+
+        <div class="card border-0 p-4">
+            <form method="post">
+                <div class="mb-3">
+                    <label class="form-label">Company Name</label>
+                    <input name="name" class="form-control" placeholder="e.g., Google, Microsoft, Amazon" value="{{ company.name if company else '' }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-control" placeholder="Company overview and placement information" rows="4">{{ company.description if company else '' }}</textarea>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Eligibility Criteria</label>
+                    <input name="eligibility_criteria" class="form-control" placeholder="e.g., Minimum CGPA 7.0, No active backlogs" value="{{ company.eligibility_criteria if company else '' }}">
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <button type="submit" class="btn btn-primary px-4">{{ 'Update' if company else 'Create' }} Company</button>
+                    <a href="{{ url_for('admin.companies') }}" class="btn btn-secondary px-4">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

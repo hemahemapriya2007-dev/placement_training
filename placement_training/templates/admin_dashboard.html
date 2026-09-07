@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h2 style="font-weight: 800; letter-spacing: 0.5px; color: var(--text-primary);">Admin Dashboard</h2>
+    <p style="color: var(--text-secondary);">System overview and student management</p>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="text-muted">Total Students</h6>
+                <h3>{{ students|length }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="text-muted">Tests Conducted</h6>
+                <h3>{{ tests }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="text-muted">Companies</h6>
+                <h3>{{ companies }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="text-muted">Avg Progress</h6>
+                <h3>{{ avg_progress }}%</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 p-4">
+    <h4 style="font-weight: 700; margin-bottom: 1.5rem;">Student Overview</h4>
+    <div style="overflow-x: auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Target Company</th>
+                    <th>Registration Date</th>
+                    <th>Progress</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for student in students %}
+                <tr>
+                    <td><a href="{{ url_for('admin.student_detail', student_id=student.id) }}" style="color: var(--neon-cyan); font-weight: 600; text-decoration: none;">{{ student.name }}</a></td>
+                    <td style="color: var(--text-secondary);">{{ student.email }}</td>
+                    <td style="color: var(--text-secondary);">{{ student.dream_company.name if student.dream_company else 'Not selected' }}</td>
+                    <td style="color: var(--text-secondary);">{{ student.created_at.strftime('%d %b %Y') if student.created_at else 'N/A' }}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div style="flex: 1; min-width: 150px;">
+                                <div class="progress">
+                                    <div class="progress-bar" style="width: {{ (student.progress_records[0].overall_progress if student.progress_records else 0) }}%"></div>
+                                </div>
+                            </div>
+                            <span style="color: var(--neon-cyan); font-weight: 600; min-width: 50px;">{{ (student.progress_records[0].overall_progress if student.progress_records else 0)|round(0) }}%</span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block title %}Student Dashboard{% endblock %}
+{% block content %}
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="text-muted">Overall Progress</h6>
+                <h3>{{ (progress.overall_progress if progress else 0)|round(2) }}%</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="text-muted">Selected Skills</h6>
+                <h3>{{ current_user.student_skills|length }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="text-muted">Completed Tasks</h6>
+                    <h3>{{ completed_tasks|default(current_user.task_records|selectattr('completed')|list|length) }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="text-muted">Leaderboard Rank</h6>
+                <h3>{% set current_rank = None %}{% for item in leaderboard %}{% if item.student_id == current_user.id %}{% set current_rank = item.rank %}{% endif %}{% endfor %}{{ current_rank if current_rank else 'N/A' }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card border-0 p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0" style="font-weight: 700;">Welcome, {{ current_user.name }}!</h4>
+                <a href="{{ url_for('student.company_selection') }}" class="btn btn-primary btn-sm">Select Dream Company</a>
+            </div>
+            <div class="mt-4">
+                <div class="mb-3">
+                    <p style="color: var(--text-secondary); font-size: 0.95rem;"><strong style="color: var(--text-primary);">Dream Company:</strong> 
+                        {% if current_user.dream_company %}
+                            <span style="color: var(--neon-cyan); font-weight: 600;">{{ current_user.dream_company.name }}</span>
+                        {% else %}
+                            <span style="color: var(--text-muted);">Not selected yet</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="mb-3">
+                    <p style="color: var(--text-secondary); font-size: 0.95rem;"><strong style="color: var(--text-primary);">CGPA:</strong> <span style="color: var(--neon-blue); font-weight: 600;">{{ current_user.cgpa }}</span></p>
+                </div>
+                <div class="mb-3">
+                    <p style="color: var(--text-secondary); font-size: 0.95rem;"><strong style="color: var(--text-primary);">Backlogs:</strong> <span style="color: var(--neon-blue); font-weight: 600;">{{ current_user.backlog_count }}</span></p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 p-4">
+            <h5 style="font-weight: 700; color: var(--text-primary);">Top 5 Leaderboard</h5>
+            <ul class="list-group list-group-flush mt-3">
+                {% for item in leaderboard %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center" style="background: {% if item.student_id == current_user.id %}linear-gradient(135deg, rgba(66, 184, 221, 0.1), rgba(76, 209, 180, 0.1)){% else %}transparent{% endif %};">
+                        <span style="color: var(--text-secondary);">#{{ item.rank }} <strong style="color: var(--text-primary);">{{ item.student_name }}</strong>{% if item.student_id == current_user.id %} <span style="color: var(--neon-cyan); font-weight: 600;">(You)</span>{% endif %}</span>
+                        <span style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: 700;">{{ item.progress }}%</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

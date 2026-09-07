@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %}Company Selection{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h2 style="font-weight: 800; letter-spacing: 0.5px; color: var(--text-primary); font-style: italic;">Select Your Dream Company</h2>
+    <p style="color: var(--text-secondary); font-size: 1.05rem; font-style: italic;">Choose companies and required skills to focus your placement preparation</p>
+</div>
+
+<div class="company-cards">
+    {% for company in companies %}
+    <div class="company-card">
+        <div class="card border-0 h-100">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h5 style="font-weight: 700; color: var(--text-primary); font-style: italic;">{{ company.name }}</h5>
+                    {% if company.id in selected_company_ids %}
+                        <span class="badge bg-success" style="background: rgba(100, 100, 100, 0.5) !important; border: 1px solid rgba(255, 255, 255, 0.3); color: var(--accent-light); font-style: italic;">✓ Selected</span>
+                    {% endif %}
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.95rem; font-style: italic;">{{ company.description or 'Company in focus for placement preparation.' }}</p>
+                <div class="mb-3">
+                    <p style="color: var(--text-muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 0.75rem; font-style: italic;">Eligibility Criteria</p>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-style: italic;">{{ company.eligibility_criteria or 'Not specified' }}</p>
+                </div>
+                <div class="mb-3">
+                    <p style="color: var(--text-muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 0.75rem; font-style: italic;">Required Skills</p>
+                    {% if company.company_skills %}
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                            {% for cs in company.company_skills %}
+                                {% set selected = selected_skills_by_company.get(company.id, []) | map('int') | list %}
+                                {% set is_selected = cs.skill.id in selected %}
+                                {% if company.id in selected_company_ids %}
+                                    <a href="{{ url_for('student.skill_assessment', company_id=company.id, skill_id=cs.skill.id) }}" class="badge skill-badge aptitude-link {% if is_selected %}selected{% endif %}" style="border: none; padding: 0.5rem 1rem; cursor: pointer; text-decoration: none;">
+                                        {{ cs.skill.name }}
+                                    </a>
+                                {% else %}
+                                    <button type="button" class="badge skill-badge {% if is_selected %}selected{% endif %}" data-company-id="{{ company.id }}" data-skill-id="{{ cs.skill.id }}" style="border: none; padding: 0.5rem 1rem; cursor: pointer;">
+                                        {{ cs.skill.name }}
+                                    </button>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <em style="color: var(--text-muted); font-style: italic;">Not listed</em>
+                    {% endif %}
+                </div>
+
+                {% if company.id in selected_company_ids %}
+                    <div class="d-flex gap-2 w-100">
+                        <span class="btn btn-secondary flex-grow-1" style="cursor: default; opacity: 0.7;">Already Selected</span>
+                        <form method="POST" action="{{ url_for('student.deselect_company', company_id=company.id) }}" class="flex-grow-1">
+                            <button type="submit" class="btn btn-outline-danger w-100">Deselect</button>
+                        </form>
+                    </div>
+                {% else %}
+                    <form method="POST" class="w-100">
+                        <input type="hidden" name="company_id" value="{{ company.id }}">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="set_dream_{{ company.id }}" name="set_dream">
+                            <label class="form-check-label" for="set_dream_{{ company.id }}" style="color: var(--text-secondary); cursor: pointer; font-style: italic;">
+                                Set as Dream Company
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Select Company</button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

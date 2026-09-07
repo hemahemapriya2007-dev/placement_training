@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Extra Aptitude Practice{% endblock %}
+{% block content %}
+<section class="aptitude-page" id="practiceApp">
+    <div class="aptitude-heading">
+        <a class="aptitude-back" href="{{ url_for('student.aptitude_assessment', company_id=company.id) }}">&larr; {{ company.name }} Aptitude</a>
+        <div class="aptitude-kicker">Additional practice</div>
+        <h1>Extra Practice <span>{{ company.name }}</span></h1>
+        <p>Select one of the five company-specific topics. This set contains five new questions.</p>
+    </div>
+    {% if not questions %}
+    <form class="assessment-shell" method="get">
+        <label for="topic" class="question-number">TOPIC</label>
+        <select id="topic" name="topic" class="form-select" required>
+            <option value="">Choose a topic</option>
+            {% for item in topics %}<option value="{{ item }}">{{ item }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-primary" type="submit" style="margin-top:1rem">Start Extra Practice</button>
+    </form>
+    {% else %}
+    <div class="assessment-shell" id="practiceShell">
+        <div class="assessment-topline"><span id="counter">Question 1 of 5</span><span class="assessment-company">{{ topic }}</span></div>
+        <div class="assessment-progress"><span id="progress"></span></div><div id="card" class="question-card"></div>
+        <button class="btn btn-primary" id="next" type="button">Next Question</button>
+    </div>
+    <div class="result-panel" id="result" hidden><div class="result-heading"><div class="aptitude-kicker">Practice complete</div><h2>Your result</h2><p id="level"></p></div><div class="result-details"><div><span>Total Questions</span><strong>5</strong></div><div><span>Correct Answers</span><strong id="correct">0</strong></div><div><span>Wrong Answers</span><strong id="wrong">0</strong></div><div><span>Percentage</span><strong id="percentage">0%</strong></div><div><span>Performance Level</span><strong id="performance">Low</strong></div></div><div id="reviews"></div></div>
+    {% endif %}
+</section>
+{% if questions %}<script id="practiceQuestions" type="application/json">{{ questions|tojson }}</script><script>
+(()=>{const questions=JSON.parse(document.getElementById('practiceQuestions').textContent),card=document.getElementById('card'),answers=[];let current=0;
+function render(){const item=questions[current];document.getElementById('counter').textContent=`Question ${current+1} of 5`;document.getElementById('progress').style.width=`${(current+1)*20}%`;card.innerHTML=`<div class="question-number">${String(current+1).padStart(2,'0')} / 05</div><h2>${item.question}</h2>`+item.options.map((option,index)=>`<button type="button" class="answer-option" data-answer="${index}"><span class="answer-letter">${String.fromCharCode(65+index)}</span><span>${option}</span></button>`).join('');card.querySelectorAll('.answer-option').forEach(button=>button.onclick=()=>{answers[current]=Number(button.dataset.answer);card.querySelectorAll('.answer-option').forEach(item=>item.classList.remove('selected'));button.classList.add('selected')});document.getElementById('next').textContent=current===4?'Submit Practice':'Next Question'}
+function finish(){const correct=answers.reduce((sum,answer,index)=>sum+(answer===questions[index].answer?1:0),0),percentage=correct*20,level=percentage>=80?'High / Excellent':percentage>=60?'Good':percentage>=40?'Average':'Low';document.getElementById('practiceShell').hidden=true;document.getElementById('result').hidden=false;document.getElementById('correct').textContent=correct;document.getElementById('wrong').textContent=5-correct;document.getElementById('percentage').textContent=`${percentage}%`;document.getElementById('performance').textContent=level;document.getElementById('level').textContent=`Performance Level: ${level}`;document.getElementById('reviews').innerHTML=questions.map((item,index)=>answers[index]===item.answer?'':`<article class="extra-item"><div class="question-number">WRONG ANSWER REVIEW ${index+1}</div><h3>${item.question}</h3><p><strong>Student's Answer:</strong> ${answers[index]===undefined?'Not answered':item.options[answers[index]]}</p><p><strong>Correct Answer:</strong> ${item.correct_answer}</p><p><strong>Why wrong:</strong> ${item.why_wrong}</p><p><strong>Correct logic:</strong> ${item.logic}</p><p><strong>Formula:</strong> ${item.formula}</p><p><strong>Step-by-step:</strong> ${item.steps}</p><p><strong>Final correct answer:</strong> ${item.final_answer}</p></article>`).join('')}
+document.getElementById('next').onclick=()=>{if(answers[current]===undefined)return;if(current<4){current++;render()}else finish()};render()})()
++</script>{% endif %}
++{% endblock %}

@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}Student Progress - {{ student.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div><h2 style="font-weight: 800; color: var(--text-primary);">{{ student.name }}</h2><p style="color: var(--text-secondary);">{{ student.email }} · {{ student.dream_company.name if student.dream_company else 'Target company not selected' }}</p></div>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+</div>
+<div class="row g-4 mb-4">
+    <div class="col-md-3"><div class="card stat-card h-100"><div class="card-body"><h6 class="text-muted">Overall Progress</h6><h3>{{ progress.overall_progress|round(1) if progress else 0 }}%</h3></div></div></div>
+    <div class="col-md-3"><div class="card stat-card h-100"><div class="card-body"><h6 class="text-muted">Selected Skills</h6><h3>{{ selected_skills|length }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card stat-card h-100"><div class="card-body"><h6 class="text-muted">Completed Tasks</h6><h3>{{ completed_tasks|length }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card stat-card h-100"><div class="card-body"><h6 class="text-muted">Test Scores</h6><h3>{{ test_results|length }}</h3></div></div></div>
+</div>
+<div class="row g-4">
+    <div class="col-lg-6"><div class="card border-0 p-4 h-100"><h5>Skills</h5><p style="color: var(--text-secondary);">Completed: {{ completed_skills|length }} · Pending: {{ pending_skills|length }}</p><div class="progress mb-3"><div class="progress-bar" style="width: {{ (completed_skills|length / selected_skills|length * 100) if selected_skills else 0 }}%;"></div></div><div>{% for item in selected_skills %}<span class="badge {% if item.completed %}bg-success{% else %}bg-secondary{% endif %} m-1">{{ item.skill.name }}</span>{% else %}<span style="color: var(--text-muted);">No skills selected.</span>{% endfor %}</div></div></div>
+    <div class="col-lg-6"><div class="card border-0 p-4 h-100"><h5>Tasks</h5><p style="color: var(--text-secondary);">Completed: {{ completed_tasks|length }} · Pending: {{ pending_tasks|length }}</p>{% for item in completed_tasks %}<div class="mb-2" style="color: var(--text-secondary);">✓ {{ item.task.title }}</div>{% endfor %}{% for item in pending_tasks %}<div class="mb-2" style="color: var(--text-muted);">○ {{ item.task.title }}</div>{% endfor %}</div></div>
+</div>
+<div class="row g-4 mt-1">
+    <div class="col-lg-6"><div class="card border-0 p-4"><h5>Skill Completion Chart</h5><canvas id="skillChart" height="180"></canvas></div></div>
+    <div class="col-lg-6"><div class="card border-0 p-4"><h5>Test Performance Chart</h5><canvas id="testChart" height="180"></canvas></div></div>
+</div>
+<div class="card border-0 p-4 mt-4"><h5>Test History</h5><div style="overflow-x:auto"><table class="table"><thead><tr><th>Test</th><th>Score</th><th>Percentage</th><th>Status</th><th>Date</th></tr></thead><tbody>{% for result in test_results %}<tr><td>{{ result.test.title }}</td><td>{{ result.score }}</td><td>{{ result.percentage|round(1) }}%</td><td>{{ 'Passed' if result.passed else 'Completed' }}</td><td>{{ result.submitted_at.strftime('%d %b %Y %H:%M') if result.submitted_at else 'N/A' }}</td></tr>{% else %}<tr><td colspan="5">No tests completed.</td></tr>{% endfor %}</tbody></table></div></div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+new Chart(document.getElementById('skillChart'), {type:'doughnut', data:{labels:['Completed','Pending'], datasets:[{data:[{{ completed_skills|length }},{{ pending_skills|length }}], backgroundColor:['#00ff96','#657080']}]}, options:{plugins:{legend:{labels:{color:'#dce7f2'}}}}});
+new Chart(document.getElementById('testChart'), {type:'bar', data:{labels:{{ test_results|map(attribute='test.title')|list|tojson }}, datasets:[{label:'Percentage', data:{{ test_results|map(attribute='percentage')|list|tojson }}, backgroundColor:'#00d9ff'}]}, options:{scales:{y:{beginAtZero:true,max:100}}}});
+</script>
+{% endblock %}

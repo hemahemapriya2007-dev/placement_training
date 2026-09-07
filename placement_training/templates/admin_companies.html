@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Admin - Companies{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 style="font-weight: 800; letter-spacing: 0.5px; color: var(--text-primary);">Companies</h2>
+        <p style="color: var(--text-secondary); margin-top: 0.5rem;">Manage company information and requirements</p>
+    </div>
+    <a href="{{ url_for('admin.create_company') }}" class="btn btn-primary">+ Create Company</a>
+</div>
+<div class="card border-0 p-4">
+    <div style="overflow-x: auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Eligibility</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for company in companies %}
+                <tr>
+                    <td style="color: var(--text-secondary); font-weight: 600;">{{ loop.index }}</td>
+                    <td style="color: var(--text-primary); font-weight: 600;">{{ company.name }}</td>
+                    <td style="color: var(--text-secondary); max-width: 200px; word-wrap: break-word;">{{ company.description }}</td>
+                    <td style="color: var(--text-secondary); max-width: 200px; word-wrap: break-word;">{{ company.eligibility_criteria }}</td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <a href="{{ url_for('admin.edit_company', company_id=company.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                            <form action="{{ url_for('admin.delete_company', company_id=company.id) }}" method="post" style="display: inline;" onsubmit="return confirm('Delete this company? This action cannot be undone.');">
+                                <button class="btn btn-sm" style="background: linear-gradient(135deg, rgba(255, 0, 110, 0.3), rgba(255, 100, 150, 0.2)); color: #ff7a96; border: 1px solid rgba(255, 0, 110, 0.4);">Delete</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
