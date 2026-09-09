@@ -153,6 +153,7 @@ class StudentSkill(db.Model):
     skill_id = db.Column(db.Integer, db.ForeignKey('skills.id'), nullable=False)
     completed = db.Column(db.Boolean, default=False)
     score = db.Column(db.Float, default=0.0)
+    completion_percent = db.Column(db.Float, default=0.0)
     completed_at = db.Column(db.DateTime)
 
     __table_args__ = (UniqueConstraint('student_id', 'skill_id', name='uq_student_skill'),)
@@ -284,6 +285,12 @@ class Progress(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
+    project_completion_percent = db.Column(db.Float, default=0.0)
+    project_performance_percent = db.Column(db.Float, default=0.0)
+    skill_completion_percent = db.Column(db.Float, default=0.0)
+    task_completion_percent = db.Column(db.Float, default=0.0)
+    challenge_performance_percent = db.Column(db.Float, default=0.0)
+    overall_progress_percent = db.Column(db.Float, default=0.0)
     skill_completion = db.Column(db.Float, default=0.0)
     task_completion = db.Column(db.Float, default=0.0)
     test_performance = db.Column(db.Float, default=0.0)
@@ -291,6 +298,8 @@ class Progress(db.Model):
     discussion_performance = db.Column(db.Float, default=0.0)
     overall_progress = db.Column(db.Float, default=0.0)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint('student_id', name='uq_progress_student'),)
 
     student = db.relationship('Student', back_populates='progress_records')
 
@@ -306,6 +315,24 @@ class MockInterview(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     student = db.relationship('Student', back_populates='mock_interviews')
+
+
+class HRInterviewAttempt(db.Model):
+    __tablename__ = 'hr_interview_attempts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'))
+    question_number = db.Column(db.Integer, nullable=False)
+    question = db.Column(db.Text, nullable=False)
+    answer = db.Column(db.Text, nullable=False)
+    score = db.Column(db.Float, nullable=False, default=0.0)
+    feedback = db.Column(db.Text, nullable=False)
+    improvement = db.Column(db.Text, nullable=False)
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    student = db.relationship('Student', backref=db.backref('hr_interview_attempts', cascade='all, delete-orphan'))
+    company = db.relationship('Company')
 
 
 class Resume(db.Model):
@@ -410,6 +437,7 @@ class AptitudeQuestion(db.Model):
     __tablename__ = 'aptitude_questions'
 
     id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
     topic_id = db.Column(db.Integer, db.ForeignKey('aptitude_topics.id'), nullable=False)
     question_text = db.Column(db.Text, nullable=False)
     option_a = db.Column(db.String(512), nullable=False)
@@ -419,8 +447,12 @@ class AptitudeQuestion(db.Model):
     correct_answer = db.Column(db.String(1), nullable=False)  # A, B, C, D
     explanation = db.Column(db.Text)
     concept_definition = db.Column(db.Text)
+    question_code = db.Column(db.String(64), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    __table_args__ = (UniqueConstraint('question_code', name='uq_aptitude_question_code'),)
+
+    company = db.relationship('Company', backref=db.backref('aptitude_questions', cascade='all, delete-orphan'))
     topic = db.relationship('AptitudeTopic', back_populates='questions')
 
 
@@ -429,6 +461,7 @@ class AptitudeAttempt(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
     topic_id = db.Column(db.Integer, db.ForeignKey('aptitude_topics.id'), nullable=False)
     total_questions = db.Column(db.Integer, default=5)
     correct_answers = db.Column(db.Integer, default=0)
@@ -438,6 +471,7 @@ class AptitudeAttempt(db.Model):
     completed_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     student = db.relationship('Student', backref=db.backref('aptitude_attempts', cascade='all, delete-orphan'))
+    company = db.relationship('Company', backref=db.backref('aptitude_attempts', cascade='all, delete-orphan'))
     topic = db.relationship('AptitudeTopic', back_populates='attempts')
 
 
@@ -451,7 +485,14 @@ class AptitudeQuestionAttempt(db.Model):
     question_key = db.Column(db.String(255), nullable=False)
     selected_answer = db.Column(db.String(1), nullable=False)
     correct = db.Column(db.Boolean, default=False)
+    explanation = db.Column(db.Text)
+    concept_definition = db.Column(db.Text)
     attempted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint(
+        'student_id', 'company_id', 'topic_id', 'question_key',
+        name='uq_aptitude_question_once'
+    ),)
 
     student = db.relationship('Student', backref=db.backref('aptitude_question_attempts', cascade='all, delete-orphan'))
     company = db.relationship('Company')
@@ -473,6 +514,83 @@ class GeneralAptitudeTest(db.Model):
     completed_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     student = db.relationship('Student', backref=db.backref('general_aptitude_tests', cascade='all, delete-orphan'))
+
+
+class ExtraAptitudeTest(db.Model):
+    __tablename__ = 'extra_aptitude_tests'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
+    topic_name = db.Column(db.String(100))
+    total_questions = db.Column(db.Integer, default=5)
+    correct_answers = db.Column(db.Integer, default=0)
+    wrong_answers = db.Column(db.Integer, default=0)
+    score = db.Column(db.Float, default=0.0)
+    percentage = db.Column(db.Float, default=0.0)
+    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    student = db.relationship('Student', backref=db.backref('extra_aptitude_tests', cascade='all, delete-orphan'))
+
+
+class ExtraAptitudeAnswer(db.Model):
+    __tablename__ = 'extra_aptitude_answers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    test_id = db.Column(db.Integer, db.ForeignKey('extra_aptitude_tests.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
+    question_key = db.Column(db.String(255), nullable=False)
+    topic_name = db.Column(db.String(100), nullable=False)
+    question_text = db.Column(db.Text, nullable=False)
+    selected_answer = db.Column(db.String(1), nullable=False)
+    correct_answer = db.Column(db.String(1), nullable=False)
+    is_correct = db.Column(db.Boolean, default=False)
+    explanation = db.Column(db.Text)
+    concept = db.Column(db.Text)
+    attempted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    test = db.relationship('ExtraAptitudeTest', backref=db.backref('answers', cascade='all, delete-orphan'))
+    student = db.relationship('Student')
+
+    __table_args__ = (UniqueConstraint('student_id', 'question_key', name='uq_extra_aptitude_answer_once'),)
+
+
+class TopicAptitudeTest(db.Model):
+    __tablename__ = 'topic_aptitude_tests'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
+    topic_name = db.Column(db.String(100), nullable=False)
+    phase = db.Column(db.String(20), nullable=False)
+    total_questions = db.Column(db.Integer, default=10)
+    correct_answers = db.Column(db.Integer, default=0)
+    wrong_answers = db.Column(db.Integer, default=0)
+    score = db.Column(db.Float, default=0.0)
+    percentage = db.Column(db.Float, default=0.0)
+    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    student = db.relationship('Student', backref=db.backref('topic_aptitude_tests', cascade='all, delete-orphan'))
+
+
+class TopicAptitudeAnswer(db.Model):
+    __tablename__ = 'topic_aptitude_answers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    test_id = db.Column(db.Integer, db.ForeignKey('topic_aptitude_tests.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
+    topic_name = db.Column(db.String(100), nullable=False)
+    question_key = db.Column(db.String(255), nullable=False)
+    question_text = db.Column(db.Text, nullable=False)
+    selected_answer = db.Column(db.String(1), nullable=False)
+    correct_answer = db.Column(db.String(1), nullable=False)
+    is_correct = db.Column(db.Boolean, default=False)
+    explanation = db.Column(db.Text)
+    concept = db.Column(db.Text)
+    attempted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    test = db.relationship('TopicAptitudeTest', backref=db.backref('answers', cascade='all, delete-orphan'))
+    student = db.relationship('Student')
+
+    __table_args__ = (UniqueConstraint('student_id', 'topic_name', 'question_key', name='uq_topic_aptitude_answer_once'),)
 
 
 # ==================== NEW MODELS FOR GROUP DISCUSSION FEATURES ====================
@@ -504,6 +622,7 @@ class GroupDiscussionParticipant(db.Model):
     session_id = db.Column(db.Integer, db.ForeignKey('group_discussion_sessions.id'), nullable=False)
     student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    attendance_status = db.Column(db.String(20), default='active', nullable=False)
     left_at = db.Column(db.DateTime)
     participation_duration = db.Column(db.Integer, default=0)  # in seconds
 

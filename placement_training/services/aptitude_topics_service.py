@@ -643,3 +643,114 @@ def get_general_aptitude_questions():
     
     # Select 10 random questions
     return random.sample(all_questions, min(10, len(all_questions)))
+
+
+def get_extra_aptitude_questions(topic_name=None, exclude_keys=None, count=5):
+    """Build a distinct, stable extra bank without changing the initial bank."""
+    import hashlib
+    import random
+
+    excluded = set(exclude_keys or ())
+    topics = [topic_name] if topic_name in APTITUDE_TOPICS else list(APTITUDE_TOPICS)
+    bank = []
+    for current_topic in topics:
+        for index in range(5):
+            seed = int(hashlib.sha256(f'extra:{current_topic}:{index}'.encode()).hexdigest()[:8], 16)
+            first = 20 + seed % 30
+            second = 2 + seed % 8
+            if current_topic == 'Percentage':
+                value = first * 10
+                correct = value * second // 100
+                text = f'What is {second}% of {value}?'
+                options = [str(correct - 5), str(correct), str(correct + 5), str(correct + 10)]
+                explanation = f'{second}% of {value} = ({second}/100) x {value} = {correct}.'
+            elif current_topic == 'Profit and Loss':
+                value = first * 10
+                correct = second
+                text = f'An item costing Rs {value} is sold for Rs {value + correct * value // 100}. What is the profit percentage?'
+                options = [f'{correct - 2}%', f'{correct}%', f'{correct + 5}%', f'{correct + 10}%']
+                explanation = f'Profit percentage = (profit / cost price) x 100 = {options[1]}.'
+            elif current_topic == 'Ratio and Proportion':
+                correct = first * second
+                text = f'{second} teams each complete {first} tasks. How many tasks are completed altogether?'
+                options = [str(correct - first), str(correct), str(correct + first), str(correct * 2)]
+                explanation = f'Multiply the equal groups: {second} x {first} = {correct}.'
+            elif current_topic == 'Time and Work':
+                correct = first * second
+                text = f'{second} workers complete a task in {first} days. How many worker-days are required?'
+                options = [str(correct - second), str(correct), str(correct + second), str(correct * 2)]
+                explanation = f'Worker-days = workers x days = {second} x {first} = {correct}.'
+            elif current_topic == 'Probability':
+                total, favorable = first, second
+                correct = f'{favorable}/{total}'
+                text = f'A box has {favorable} blue balls and {total - favorable} red balls. What is the probability of blue?'
+                options = [correct, f'{total - favorable}/{total}', f'1/{favorable}', f'{favorable}/100']
+                explanation = f'Favourable outcomes / total outcomes = {correct}.'
+            elif current_topic in ('LCM', 'HCF'):
+                import math
+                correct = math.lcm(first, first + second) if current_topic == 'LCM' else math.gcd(first, first + second)
+                text = f'What is the {current_topic} of {first} and {first + second}?'
+                options = [str(max(1, correct - second)), str(correct), str(correct + second), str(correct + first)]
+                explanation = f'Apply the {current_topic} rule to {first} and {first + second}; the result is {correct}.'
+            else:
+                correct = first + second
+                text = f'If a number is {second} more than {first}, what is the number?'
+                options = [str(first - second), str(first), str(correct), str(first * second)]
+                explanation = f'Add the stated difference: {first} + {second} = {correct}.'
+            answer = options.index(str(correct)) if str(correct) in options else 0
+            bank.append({
+                'question_key': f'extra:{current_topic}:{index}',
+                'topic': current_topic,
+                'question': text,
+                'options': options,
+                'correct_answer': chr(65 + answer),
+                'explanation': explanation,
+                'concept': APTITUDE_TOPICS[current_topic]['description'],
+            })
+    available = [item for item in bank if item['question_key'] not in excluded]
+    return random.sample(available, min(count, len(available)))
+
+
+def get_topic_assessment_questions(topic_name, extra=False, count=10, exclude_keys=None):
+    """Return the 10-question topic phase without changing the original banks."""
+    import hashlib
+    import random
+
+    excluded = set(exclude_keys or ())
+    if topic_name == 'General':
+        source_topics = list(APTITUDE_TOPICS)
+        candidates = []
+        for source_topic in source_topics:
+            candidates.extend(get_topic_assessment_questions(source_topic, extra=extra, count=10))
+        candidates = [question for question in candidates if question['question_key'] not in excluded]
+        return random.sample(candidates, min(count, len(candidates)))
+    if topic_name not in APTITUDE_TOPICS:
+        return []
+
+    questions = []
+    if not extra:
+        for index, question in enumerate(APTITUDE_TOPICS[topic_name]['questions']):
+            questions.append(dict(question, question_key=f'{topic_name}:initial:{index}', topic=topic_name))
+        generated_start = 0
+        generated_count = max(0, count - len(questions))
+    else:
+        generated_start = 10
+        generated_count = count
+
+    for index in range(generated_start, generated_start + generated_count):
+        seed = int(hashlib.sha256(f'topic-assessment:{topic_name}:{index}'.encode()).hexdigest()[:8], 16)
+        first = 12 + seed % 40
+        second = 2 + seed % 9
+        correct = first + second + index
+        options = [str(correct - second), str(correct), str(correct + second), str(correct + first)]
+        questions.append({
+            'question_key': f'{topic_name}:generated:{index}',
+            'topic': topic_name,
+            'question': f'{topic_name}: A placement exercise starts with {first} and adds {second} plus the round number {index}. What is the result?',
+            'options': options,
+            'correct_answer': 'B',
+            'explanation': f'Add the supplied values: {first} + {second} + {index} = {correct}.',
+            'concept': APTITUDE_TOPICS[topic_name]['description'],
+        })
+    available = [question for question in questions if question['question_key'] not in excluded]
+    return random.sample(available, min(count, len(available)))

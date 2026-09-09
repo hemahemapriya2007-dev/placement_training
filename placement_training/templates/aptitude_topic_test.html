@@ -105,6 +105,7 @@
                     <p id="result-status" style="color: var(--text-secondary); text-align: center; margin-top: 15px;">Completed</p>
                 </div>
                 <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <a class="btn btn-warning" href="{{ url_for('student.general_aptitude_extra', topic=topic_name) }}">Extra Questions</a>
                     <button type="button" class="btn btn-primary" onclick="window.location.href='{{ url_for('student.aptitude_topics_list') }}'">Back to Topics</button>
                 </div>
             </div>

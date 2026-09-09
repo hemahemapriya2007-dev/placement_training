@@ -1,75 +1,168 @@
-from placement_training.models import Progress, Student, StudentTask, TestResult, StudentSkill, AptitudeAttempt, GeneralAptitudeTest, GroupDiscussionResult
 from placement_training import db
+from placement_training.models import (
+    AptitudeAttempt,
+    Company,
+    GeneralAptitudeTest,
+    GroupDiscussionResult,
+    HRInterviewAttempt,
+    LearningPlan,
+    Progress,
+    Student,
+    StudentSkill,
+    TestResult,
+)
 
 
-def calculate_student_progress(student_id):
+def _bounded(value):
+    return round(min(max(float(value or 0), 0), 100), 2)
+
+
+def _test_matches_skill(result, skill_name):
+    label = f'{result.test.title} {result.test.test_type}'.lower()
+    skill_words = [word for word in skill_name.lower().split() if len(word) > 2]
+    return any(word in label for word in skill_words)
+
+
+def ensure_company_skills(student_id, company_id):
+    """Create missing student skill rows for a company's required skills."""
+    company = Company.query.get(company_id)
+    if not company:
+        return []
+    records = []
+    for company_skill in company.company_skills:
+        record = StudentSkill.query.filter_by(
+            student_id=student_id, skill_id=company_skill.skill_id
+        ).first()
+        if not record:
+            record = StudentSkill(student_id=student_id, skill_id=company_skill.skill_id)
+            db.session.add(record)
+        records.append(record)
+    return records
+
+
+def get_skill_progress(student_id, company_id=None):
+    """Return required company skills and their evidence-based percentages."""
+    student = Student.query.get(student_id)
+    if not student:
+        return []
+    company_id = company_id or student.dream_company_id
+    student_skills = (
+        ensure_company_skills(student_id, company_id)
+        if company_id else list(student.student_skills)
+    )
+
+    test_results = TestResult.query.filter_by(student_id=student_id).all()
+    aptitude_results = AptitudeAttempt.query.filter_by(student_id=student_id).all()
+    aptitude_results += GeneralAptitudeTest.query.filter_by(
+        student_id=student_id, status='completed'
+    ).all()
+    progress_items = []
+    for student_skill in student_skills:
+        skill_name = student_skill.skill.name
+        evidence = []
+        if 'aptitude' in skill_name.lower():
+            evidence.extend(item.percentage for item in aptitude_results)
+        evidence.extend(
+            result.percentage for result in test_results
+            if _test_matches_skill(result, skill_name)
+        )
+
+        if 'interview' in skill_name.lower():
+            interview_query = HRInterviewAttempt.query.filter_by(student_id=student_id)
+            if company_id:
+                interview_query = interview_query.filter_by(company_id=company_id)
+            attempted_questions = {
+                attempt.question_number for attempt in interview_query.all()
+            }
+            evidence.append(
+                len(attempted_questions) / 10 * 100
+                if attempted_questions else 0
+            )
+
+        skill_tasks = [
+            task for task in student.task_records
+            if task.task and task.task.skill_id == student_skill.skill_id
+        ]
+        if skill_tasks:
+            evidence.append(
+                sum(1 for task in skill_tasks if task.completed) / len(skill_tasks) * 100
+            )
+
+        plans = LearningPlan.query.filter_by(
+            student_id=student_id, skill_id=student_skill.skill_id
+        ).all()
+        evidence.extend(plan.completion_percentage for plan in plans)
+        if not evidence and student_skill.score:
+            evidence.append(student_skill.score)
+
+        percentage = _bounded(sum(evidence) / len(evidence)) if evidence else 0
+        student_skill.completion_percent = percentage
+        progress_items.append({
+            'skill_id': student_skill.skill_id,
+            'skill_name': skill_name,
+            'percentage': percentage,
+        })
+    return progress_items
+
+
+def calculate_student_progress(student_id, company_id=None):
     student = Student.query.get(student_id)
     if not student:
         return None
 
-    # Existing skill completion calculation
-    skill_completion = 0
-    if student.student_skills:
-        completed = sum(1 for item in student.student_skills if item.completed)
-        skill_completion = (completed / len(student.student_skills)) * 100 if student.student_skills else 0
-
-    # Existing task completion calculation
+    skill_progress = get_skill_progress(student_id, company_id)
+    skill_completion = (
+        sum(item['percentage'] for item in skill_progress) / len(skill_progress)
+        if skill_progress else 0
+    )
     total_tasks = len(student.task_records)
     completed_tasks = sum(1 for task in student.task_records if task.completed)
     task_completion = (completed_tasks / total_tasks * 100) if total_tasks else 0
-
-    # Existing test performance calculation
     test_results = TestResult.query.filter_by(student_id=student_id).all()
-    test_performance = 0
-    if test_results:
-        test_performance = sum(result.percentage for result in test_results) / len(test_results)
-
-    # NEW: Aptitude performance calculation
-    aptitude_performance = 0
-    aptitude_attempts = AptitudeAttempt.query.filter_by(student_id=student_id).all()
-    general_tests = GeneralAptitudeTest.query.filter_by(student_id=student_id).all()
-    
-    all_aptitude = aptitude_attempts + general_tests
-    if all_aptitude:
-        aptitude_performance = sum(item.percentage for item in all_aptitude) / len(all_aptitude)
-
-    # NEW: Group Discussion performance calculation
-    discussion_performance = 0
+    test_performance = (
+        sum(result.percentage for result in test_results) / len(test_results)
+        if test_results else 0
+    )
+    aptitude_results = AptitudeAttempt.query.filter_by(student_id=student_id).all()
+    aptitude_results += GeneralAptitudeTest.query.filter_by(
+        student_id=student_id, status='completed'
+    ).all()
+    aptitude_performance = (
+        sum(item.percentage for item in aptitude_results) / len(aptitude_results)
+        if aptitude_results else 0
+    )
     discussion_results = GroupDiscussionResult.query.filter_by(student_id=student_id).all()
-    if discussion_results:
-        discussion_performance = sum(item.overall_score for item in discussion_results) / len(discussion_results)
-
-    # Extended progress formula: include aptitude and discussion
-    # Old formula: (0.4 * skill) + (0.3 * task) + (0.3 * test)
-    # New formula: (0.3 * skill) + (0.2 * task) + (0.2 * test) + (0.15 * aptitude) + (0.15 * discussion)
-    overall_progress = (0.3 * skill_completion) + (0.2 * task_completion) + (0.2 * test_performance) + (0.15 * aptitude_performance) + (0.15 * discussion_performance)
+    discussion_performance = (
+        sum(item.overall_score for item in discussion_results) / len(discussion_results)
+        if discussion_results else 0
+    )
 
     progress = Progress.query.filter_by(student_id=student_id).first()
     if not progress:
         progress = Progress(student_id=student_id)
         db.session.add(progress)
-
-    progress.skill_completion = skill_completion
-    progress.task_completion = task_completion
-    progress.test_performance = test_performance
-    progress.aptitude_performance = aptitude_performance
-    progress.discussion_performance = discussion_performance
-    progress.overall_progress = overall_progress
+    progress.skill_completion_percent = _bounded(skill_completion)
+    progress.task_completion_percent = _bounded(task_completion)
+    progress.overall_progress_percent = _bounded(skill_completion)
+    progress.skill_completion = _bounded(skill_completion)
+    progress.task_completion = _bounded(task_completion)
+    progress.test_performance = _bounded(test_performance)
+    progress.aptitude_performance = _bounded(aptitude_performance)
+    progress.discussion_performance = _bounded(discussion_performance)
+    progress.overall_progress = _bounded(skill_completion)
     db.session.commit()
     return progress
 
 
 def get_leaderboard():
-    """Get leaderboard sorted by overall progress"""
     records = Progress.query.order_by(Progress.overall_progress.desc()).all()
-    leaderboard = []
-    for index, record in enumerate(records, start=1):
-        student = Student.query.get(record.student_id)
-        if student:
-            leaderboard.append({
-                'rank': index,
-                'student_name': student.name,
-                'progress': round(record.overall_progress, 2),
-                'student_id': student.id
-            })
-    return leaderboard
+    return [
+        {
+            'rank': index,
+            'student_name': record.student.name,
+            'progress': round(record.overall_progress, 2),
+            'student_id': record.student_id,
+        }
+        for index, record in enumerate(records, start=1)
+        if record.student
+    ]

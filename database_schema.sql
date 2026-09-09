@@ -320,4 +320,131 @@ SET SESSION FOREIGN_KEY_CHECKS=1;
 CREATE INDEX idx_projects_difficulty ON projects(difficulty);
 CREATE INDEX idx_students_cgpa ON students(cgpa);
 
+-- Company-specific aptitude topics, questions, attempts, and answer snapshots
+CREATE TABLE IF NOT EXISTS aptitude_topics (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS aptitude_questions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    topic_id INT NOT NULL,
+    question_text TEXT NOT NULL,
+    option_a VARCHAR(512) NOT NULL,
+    option_b VARCHAR(512) NOT NULL,
+    option_c VARCHAR(512) NOT NULL,
+    option_d VARCHAR(512) NOT NULL,
+    correct_answer CHAR(1) NOT NULL,
+    explanation TEXT,
+    concept_definition TEXT,
+    question_code VARCHAR(64) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+    FOREIGN KEY (topic_id) REFERENCES aptitude_topics(id) ON DELETE CASCADE,
+    INDEX idx_aptitude_company_topic (company_id, topic_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS aptitude_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    company_id INT NOT NULL,
+    topic_id INT NOT NULL,
+    total_questions INT DEFAULT 5,
+    correct_answers INT DEFAULT 0,
+    wrong_answers INT DEFAULT 0,
+    score DECIMAL(5,2) DEFAULT 0.00,
+    percentage DECIMAL(5,2) DEFAULT 0.00,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+    FOREIGN KEY (topic_id) REFERENCES aptitude_topics(id) ON DELETE CASCADE,
+    INDEX idx_aptitude_attempt_student (student_id, company_id, topic_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS aptitude_question_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    company_id INT NOT NULL,
+    topic_id INT NOT NULL,
+    question_key VARCHAR(255) NOT NULL,
+    selected_answer CHAR(1) NOT NULL,
+    correct TINYINT(1) DEFAULT 0,
+    explanation TEXT,
+    concept_definition TEXT,
+    attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+    FOREIGN KEY (topic_id) REFERENCES aptitude_topics(id) ON DELETE CASCADE,
+    UNIQUE KEY ux_aptitude_question_once (student_id, company_id, topic_id, question_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Additional general aptitude attempts and immutable question snapshots
+CREATE TABLE IF NOT EXISTS extra_aptitude_tests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    topic_name VARCHAR(100),
+    total_questions INT DEFAULT 5,
+    correct_answers INT DEFAULT 0,
+    wrong_answers INT DEFAULT 0,
+    score DECIMAL(5,2) DEFAULT 0.00,
+    percentage DECIMAL(5,2) DEFAULT 0.00,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS extra_aptitude_answers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    test_id INT NOT NULL,
+    student_id INT NOT NULL,
+    question_key VARCHAR(255) NOT NULL,
+    topic_name VARCHAR(100) NOT NULL,
+    question_text TEXT NOT NULL,
+    selected_answer CHAR(1) NOT NULL,
+    correct_answer CHAR(1) NOT NULL,
+    is_correct TINYINT(1) DEFAULT 0,
+    explanation TEXT,
+    concept TEXT,
+    attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (test_id) REFERENCES extra_aptitude_tests(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+    UNIQUE KEY ux_extra_aptitude_answer_once (student_id, question_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Topic-wise 10-question aptitude phases and answer snapshots
+CREATE TABLE IF NOT EXISTS topic_aptitude_tests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    topic_name VARCHAR(100) NOT NULL,
+    phase VARCHAR(20) NOT NULL,
+    total_questions INT DEFAULT 10,
+    correct_answers INT DEFAULT 0,
+    wrong_answers INT DEFAULT 0,
+    score DECIMAL(5,2) DEFAULT 0.00,
+    percentage DECIMAL(5,2) DEFAULT 0.00,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+    INDEX idx_topic_aptitude_test_student (student_id, topic_name, phase)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS topic_aptitude_answers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    test_id INT NOT NULL,
+    student_id INT NOT NULL,
+    topic_name VARCHAR(100) NOT NULL,
+    question_key VARCHAR(255) NOT NULL,
+    question_text TEXT NOT NULL,
+    selected_answer CHAR(1) NOT NULL,
+    correct_answer CHAR(1) NOT NULL,
+    is_correct TINYINT(1) DEFAULT 0,
+    explanation TEXT,
+    concept TEXT,
+    attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (test_id) REFERENCES topic_aptitude_tests(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+    UNIQUE KEY ux_topic_aptitude_answer_once (student_id, topic_name, question_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- End of schema

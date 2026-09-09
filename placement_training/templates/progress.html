@@ -90,6 +90,21 @@
     </div>
 </div>
 
+<div class="card border-0 mt-4">
+    <div class="card-body p-4">
+        <h5 style="font-weight: 700; color: var(--text-primary); margin-bottom: 1.5rem;">Aptitude Test Summary</h5>
+        <div class="row text-center" style="color: var(--text-secondary);">
+            <div class="col-6 col-md-2">Questions Attempted<br><strong style="color: var(--text-primary);">{{ aptitude_attempted|default(0) }}</strong></div>
+            <div class="col-6 col-md-2">Correct Answers<br><strong style="color: #28a745;">{{ aptitude_correct|default(0) }}</strong></div>
+            <div class="col-6 col-md-2">Wrong Answers<br><strong style="color: #dc3545;">{{ aptitude_wrong|default(0) }}</strong></div>
+            <div class="col-6 col-md-2">Overall Score<br><strong style="color: var(--text-primary);">{{ aptitude_correct|default(0) }}</strong></div>
+            <div class="col-6 col-md-2">Overall Progress<br><strong style="color: var(--neon-cyan);">{{ aptitude_progress|default(0)|round(1) }}%</strong></div>
+            <div class="col-6 col-md-2">Completed Tests<br><strong style="color: var(--text-primary);">{{ aptitude_completed_tests|default(0) }}</strong></div>
+            <div class="col-12 mt-3">Performance Level: <strong style="color: var(--neon-cyan);">{% if aptitude_performance|default(0) >= 80 %}High{% elif aptitude_performance|default(0) >= 60 %}Medium{% else %}Low{% endif %}</strong></div>
+        </div>
+    </div>
+</div>
+
 <!-- Progress Notes -->
 <div class="card border-0 mt-4" style="background: var(--bg-secondary);">
     <div class="card-body p-4">

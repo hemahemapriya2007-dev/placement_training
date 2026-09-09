@@ -46,22 +46,29 @@
         <div class="col-lg-4">
             <!-- Participants List -->
             <div class="card border-0 p-4 mb-4" style="background: var(--card-bg);">
-                <h5 style="color: var(--text-primary); font-weight: 700; margin-bottom: 20px;">Participants ({{ participants|length }})</h5>
-                <div id="participants-list">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 style="color: var(--text-primary); font-weight: 700; margin: 0;">Registered Students</h5>
+                    <span id="participants-refresh-status" style="color: var(--text-secondary); font-size: 0.75rem;">Live</span>
+                </div>
+                <div class="d-flex gap-2 mb-3">
+                    <div class="participant-stat flex-fill p-2 rounded" style="background: var(--bg-secondary);">
+                        <div id="total-participants" style="color: var(--text-primary); font-size: 1.25rem; font-weight: 700;">{{ total_participants }}</div>
+                        <div style="color: var(--text-secondary); font-size: 0.75rem;">Total</div>
+                    </div>
+                    <div class="participant-stat flex-fill p-2 rounded" style="background: var(--bg-secondary);">
+                        <div id="active-participants" style="color: #28a745; font-size: 1.25rem; font-weight: 700;">{{ active_participants }}</div>
+                        <div style="color: var(--text-secondary); font-size: 0.75rem;">Active</div>
+                    </div>
+                </div>
+                <div id="participants-list" aria-live="polite">
                     {% for participant in participants %}
                     <div class="participant-item d-flex align-items-center mb-3 p-2 rounded" style="background: var(--bg-secondary);">
                         <div class="rounded-circle me-3" style="width: 40px; height: 40px; background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 0.8rem;">
-                            {{ participant.name[0] }}
+                            {{ participant.student.name[0] }}
                         </div>
-                        <div>
-                            <p style="color: var(--text-primary); margin: 0; font-weight: 600;">{{ participant.name }}</p>
-                            <p style="color: var(--text-secondary); margin: 0; font-size: 0.8rem;">
-                                {% if participant.id == current_user.id %}
-                                <span style="color: var(--neon-cyan);">🟢 You</span>
-                                {% else %}
-                                <span>🔵 Active</span>
-                                {% endif %}
-                            </p>
+                        <div class="flex-grow-1">
+                            <p style="color: var(--text-primary); margin: 0; font-weight: 600;">{{ participant.student.name }}{% if participant.student_id == current_user.id %} (You){% endif %}</p>
+                            <span class="participant-status-badge status-{{ participant.attendance_status or ('offline' if participant.left_at else 'active') }}">{{ participant.attendance_status or ('Offline' if participant.left_at else 'Active') }}</span>
                         </div>
                     </div>
                     {% endfor %}
@@ -144,6 +151,7 @@
 <script>
 let microphoneOn = true;
 let speakerOn = true;
+const participantsUrl = '{{ url_for('student.group_discussion_participants', session_id=session.id) }}';
 
 function toggleMicrophone() {
     microphoneOn = !microphoneOn;
@@ -202,6 +210,56 @@ function submitEvaluation() {
     });
 }
 
+function participantStatusLabel(status) {
+    return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function renderParticipants(data) {
+    document.getElementById('total-participants').textContent = data.total_participants;
+    document.getElementById('active-participants').textContent = data.active_participants;
+
+    const list = document.getElementById('participants-list');
+    list.replaceChildren();
+    data.participants.forEach((participant) => {
+        const item = document.createElement('div');
+        item.className = 'participant-item d-flex align-items-center mb-3 p-2 rounded';
+        item.style.background = 'var(--bg-secondary)';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'rounded-circle me-3';
+        avatar.style.cssText = 'width: 40px; height: 40px; background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 0.8rem;';
+        avatar.textContent = participant.name.charAt(0).toUpperCase();
+
+        const details = document.createElement('div');
+        details.className = 'flex-grow-1';
+        const name = document.createElement('p');
+        name.style.cssText = 'color: var(--text-primary); margin: 0; font-weight: 600;';
+        name.textContent = participant.name + (participant.is_current_user ? ' (You)' : '');
+
+        const badge = document.createElement('span');
+        badge.className = 'participant-status-badge status-' + participant.status;
+        badge.textContent = participantStatusLabel(participant.status);
+        details.append(name, badge);
+        item.append(avatar, details);
+        list.appendChild(item);
+    });
+}
+
+async function refreshParticipants() {
+    try {
+        const response = await fetch(participantsUrl, { headers: { 'Accept': 'application/json' } });
+        if (!response.ok) throw new Error('Participant request failed');
+        renderParticipants(await response.json());
+        document.getElementById('participants-refresh-status').textContent = 'Live';
+    } catch (error) {
+        document.getElementById('participants-refresh-status').textContent = 'Unavailable';
+        console.error(error);
+    }
+}
+
+refreshParticipants();
+setInterval(refreshParticipants, 4000);
+
 // Request microphone permission on page load
 window.addEventListener('load', async () => {
     try {
@@ -221,6 +279,30 @@ window.addEventListener('load', async () => {
 
     .participant-item:hover {
         background: linear-gradient(135deg, rgba(66, 184, 221, 0.1), rgba(76, 209, 180, 0.1)) !important;
+    }
+
+    .participant-status-badge {
+        display: inline-block;
+        margin-top: 3px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+
+    .status-active, .status-speaking {
+        color: #146c43;
+        background: #d1e7dd;
+    }
+
+    .status-muted {
+        color: #664d03;
+        background: #fff3cd;
+    }
+
+    .status-offline {
+        color: #842029;
+        background: #f8d7da;
     }
 
     input[type="range"] {

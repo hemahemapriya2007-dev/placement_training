@@ -34,8 +34,35 @@
                         {% endif %}
                     </p>
                     <p style="color: var(--text-secondary); font-size: 0.85rem;">
-                        <strong>Participants:</strong> {{ session.participants|length }} / {{ session.max_participants }}
+                        <strong>Registered:</strong> {{ session.participants|length }} / {{ session.max_participants }}
                     </p>
+                </div>
+
+                <div class="mb-3 p-3 rounded" style="background: var(--bg-secondary);">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong style="color: var(--text-primary);">Going to the discussion</strong>
+                        <span style="color: var(--neon-cyan); font-size: 0.8rem;">
+                            {{ session.participants|selectattr('attendance_status', 'equalto', 'active')|list|length }} active
+                        </span>
+                    </div>
+                    {% if session.participants %}
+                    <div>
+                        {% for participant in session.participants %}
+                        <div class="d-flex justify-content-between align-items-center py-1" style="font-size: 0.85rem;">
+                            <span style="color: var(--text-primary);">{{ participant.student.name }}</span>
+                            {% if participant.attendance_status == 'active' and not participant.left_at %}
+                            <span class="badge bg-success">Active</span>
+                            {% elif participant.attendance_status == 'offline' or participant.left_at %}
+                            <span class="badge bg-secondary">Offline</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">{{ participant.attendance_status|title }}</span>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <span style="color: var(--text-secondary); font-size: 0.8rem;">No students registered yet.</span>
+                    {% endif %}
                 </div>
 
                 {% if session.description %}

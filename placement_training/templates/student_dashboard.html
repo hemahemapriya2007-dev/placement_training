@@ -1,6 +1,30 @@
 {% extends 'base.html' %}
 {% block title %}Student Dashboard{% endblock %}
 {% block content %}
+{% set overall = (progress.overall_progress if progress else 0)|round(2) %}
+{% set rank_state = namespace(value=None) %}{% for item in leaderboard %}{% if item.student_id == current_user.id %}{% set rank_state.value = item.rank %}{% endif %}{% endfor %}
+<div class="dashboard-shell">
+    <section class="dashboard-hero">
+        <div class="hero-copy"><span class="eyebrow"><span class="eyebrow-pulse"></span> Your learning command center</span><h1>Welcome back,<br><strong>{{ current_user.name }}.</strong></h1><p>Keep your momentum going. Every focused session moves you closer to your next opportunity.</p><div class="hero-actions"><a href="{{ url_for('student.company_selection') }}" class="btn btn-primary">Continue learning <span>↗</span></a><a href="{{ url_for('student.progress') }}" class="hero-text-link">View progress <span>→</span></a></div></div>
+        <div class="hero-visual"><div class="hero-orbit orbit-one"></div><div class="hero-orbit orbit-two"></div><div class="hero-core"><span>{{ overall }}%</span><small>ready</small></div><div class="hero-star star-one">✦</div><div class="hero-star star-two">✧</div></div>
+        <div class="hero-company"><span class="mini-label">Target company</span><strong>{{ current_user.dream_company.name if current_user.dream_company else 'Choose your target' }}</strong><span class="status-chip"><i></i>{{ 'Active target' if current_user.dream_company else 'Not selected' }}</span></div>
+    </section>
+    <section class="dashboard-stats">
+        <div class="dashboard-stat"><span class="stat-icon blue">◒</span><div><small>Overall progress</small><strong>{{ overall }}%</strong><em>Learning readiness</em></div><div class="stat-spark spark-blue"></div></div>
+        <div class="dashboard-stat"><span class="stat-icon purple">◇</span><div><small>Selected skills</small><strong>{{ current_user.student_skills|length }}</strong><em>In your learning plan</em></div><div class="stat-spark spark-purple"></div></div>
+        <div class="dashboard-stat"><span class="stat-icon green">✓</span><div><small>Completed tasks</small><strong>{{ completed_tasks|default(current_user.task_records|selectattr('completed')|list|length) }}</strong><em>Milestones reached</em></div><div class="stat-spark spark-green"></div></div>
+        <div class="dashboard-stat"><span class="stat-icon amber">#</span><div><small>Leaderboard rank</small><strong>{{ rank_state.value if rank_state.value else 'N/A' }}</strong><em>Across all learners</em></div><div class="stat-spark spark-amber"></div></div>
+    </section>
+    <section class="dashboard-grid dashboard-grid-main">
+        <div class="dashboard-panel readiness-panel"><div class="panel-heading"><div><span class="eyebrow">Placement readiness</span><h2>Your profile at a glance</h2></div><span class="panel-menu">•••</span></div><div class="readiness-layout"><div class="profile-orb"><span class="profile-avatar">{{ (current_user.name[0] if current_user.name else 'U')|upper }}</span><i></i></div><div class="profile-details"><h3>{{ current_user.name }}</h3><p>{{ current_user.email }}</p><div class="profile-facts"><span><small>CGPA</small><b>{{ current_user.cgpa }}</b></span><span><small>Backlogs</small><b>{{ current_user.backlog_count }}</b></span><span><small>Target</small><b>{{ current_user.dream_company.name if current_user.dream_company else 'Pending' }}</b></span></div><a href="{{ url_for('student.company_selection') }}" class="btn btn-secondary btn-sm">Manage goals</a></div></div><div class="readiness-track"><div class="track-label"><span>Profile readiness</span><b>{{ overall }}%</b></div><div class="progress"><div class="progress-bar" style="width: {{ overall }}%"></div></div></div></div>
+    </section>
+    <section class="dashboard-panel activity-panel dashboard-activity"><div class="panel-heading"><div><span class="eyebrow">Your rhythm</span><h2>Recent activity</h2></div><span class="activity-live"><i></i>Live</span></div><div class="activity-list"><div class="activity-item"><span class="activity-dot blue"></span><div><strong>Learning workspace opened</strong><small>Ready for your next focused session</small></div><time>Now</time></div><div class="activity-item"><span class="activity-dot purple"></span><div><strong>{{ current_user.student_skills|length }} skills selected</strong><small>Your plan is taking shape</small></div><time>Plan</time></div><div class="activity-item"><span class="activity-dot green"></span><div><strong>{{ completed_tasks|default(0) }} tasks completed</strong><small>Keep building your streak</small></div><time>Progress</time></div></div></section>
+    <section class="dashboard-grid dashboard-grid-lower">
+        <div class="dashboard-panel interview-panel"><div class="panel-heading"><div><span class="eyebrow purple-eyebrow">Interview studio</span><h2>HR Interview Practice</h2><p>Sharpen the story behind your skills.</p></div>{% if current_user.dream_company and interview_skill %}<a href="{{ url_for('student.skill_assessment', company_id=current_user.dream_company.id, skill_id=interview_skill.id) }}" class="icon-arrow">↗</a>{% endif %}</div><div class="interview-metrics"><div><strong>{{ interview_questions_attempted }}</strong><span>Questions attempted</span></div><div><strong>{{ interview_average_score|round(1) }}/10</strong><span>Average score</span></div><div><strong>{{ interview_completion_percentage|round(0) }}%</strong><span>Completion</span></div><div><strong>{{ interview_last_practice.strftime('%d %b') if interview_last_practice else '—' }}</strong><span>Last practice</span></div></div>{% if current_user.dream_company and interview_skill %}<a href="{{ url_for('student.skill_assessment', company_id=current_user.dream_company.id, skill_id=interview_skill.id) }}" class="btn btn-primary interview-button">Practice now <span>→</span></a>{% endif %}</div>
+        <div class="dashboard-panel leaderboard-panel"><div class="panel-heading"><div><span class="eyebrow">Community pulse</span><h2>Top learners</h2></div><a href="{{ url_for('student.progress') }}" class="panel-link">View all</a></div><div class="leaderboard-list">{% for item in leaderboard %}<div class="leader-row {% if item.student_id == current_user.id %}is-current{% endif %}"><span class="leader-rank">{{ item.rank }}</span><span class="leader-avatar">{{ item.student_name[0]|upper }}</span><span class="leader-name">{{ item.student_name }}{% if item.student_id == current_user.id %}<small>You</small>{% endif %}</span><strong>{{ item.progress }}%</strong></div>{% endfor %}</div></div>
+    </section>
+</div>
+<div class="legacy-dashboard-panels">
 <div class="row g-4 mb-4">
     <div class="col-md-3">
         <div class="card stat-card h-100">
@@ -30,9 +54,24 @@
         <div class="card stat-card h-100">
             <div class="card-body">
                 <h6 class="text-muted">Leaderboard Rank</h6>
-                <h3>{% set current_rank = None %}{% for item in leaderboard %}{% if item.student_id == current_user.id %}{% set current_rank = item.rank %}{% endif %}{% endfor %}{{ current_rank if current_rank else 'N/A' }}</h3>
+                <h3>{{ rank if rank else 'N/A' }}</h3>
             </div>
         </div>
+    </div>
+</div>
+
+<div class="card border-0 p-4 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0" style="font-weight: 700; color: var(--text-primary);">HR Interview Practice</h5>
+        {% if current_user.dream_company and interview_skill %}
+        <a href="{{ url_for('student.skill_assessment', company_id=current_user.dream_company.id, skill_id=interview_skill.id) }}" class="btn btn-primary btn-sm">Practice Now</a>
+        {% endif %}
+    </div>
+    <div class="row g-3 text-center">
+        <div class="col-md-3"><strong style="color: var(--neon-cyan); font-size: 1.4rem;">{{ interview_questions_attempted }}</strong><div class="text-muted">Interview Questions Attempted</div></div>
+        <div class="col-md-3"><strong style="color: var(--neon-cyan); font-size: 1.4rem;">{{ interview_average_score|round(1) }}/10</strong><div class="text-muted">Average Score</div></div>
+        <div class="col-md-3"><strong style="color: var(--neon-cyan); font-size: 1.4rem;">{{ interview_completion_percentage|round(0) }}%</strong><div class="text-muted">Completion Percentage</div></div>
+        <div class="col-md-3"><strong style="color: var(--neon-cyan); font-size: 1.4rem;">{{ interview_last_practice.strftime('%d %b %Y') if interview_last_practice else 'Not yet' }}</strong><div class="text-muted">Last Practice Date</div></div>
     </div>
 </div>
 
@@ -77,4 +116,5 @@
         </div>
     </div>
 </div>
+ </div>
 {% endblock %}

@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}Add Aptitude Question{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <h2 style="font-weight: 800; color: var(--text-primary);">Add Aptitude Question</h2>
+        <p style="color: var(--text-secondary);">Add questions to a company and topic bank. Existing attempts are unchanged.</p>
+        <div class="card border-0 p-4">
+            <form method="post">
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label class="form-label">Company</label><select name="company_id" class="form-select" required>{% for company in companies %}<option value="{{ company.id }}">{{ company.name }}</option>{% endfor %}</select></div>
+                    <div class="col-md-6 mb-3"><label class="form-label">Topic</label><select name="topic_id" class="form-select" required>{% for topic in topics %}<option value="{{ topic.id }}">{{ topic.name }}</option>{% endfor %}</select></div>
+                </div>
+                <div class="mb-3"><label class="form-label">Question</label><textarea name="question_text" class="form-control" rows="3" required></textarea></div>
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label class="form-label">Option A</label><input name="option_a" class="form-control" required></div>
+                    <div class="col-md-6 mb-3"><label class="form-label">Option B</label><input name="option_b" class="form-control" required></div>
+                    <div class="col-md-6 mb-3"><label class="form-label">Option C</label><input name="option_c" class="form-control" required></div>
+                    <div class="col-md-6 mb-3"><label class="form-label">Option D</label><input name="option_d" class="form-control" required></div>
+                </div>
+                <div class="mb-3"><label class="form-label">Correct Answer</label><select name="correct_answer" class="form-select" required><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+                <div class="mb-3"><label class="form-label">Explanation</label><textarea name="explanation" class="form-control" rows="3"></textarea></div>
+                <div class="mb-4"><label class="form-label">Related Concept</label><textarea name="concept_definition" class="form-control" rows="2"></textarea></div>
+                <button type="submit" class="btn btn-primary">Add Question</button>
+                <a href="{{ url_for('admin.aptitude_questions') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

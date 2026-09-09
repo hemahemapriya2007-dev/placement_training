@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% block title %}{{ topic_name }} Aptitude Test{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 style="color: var(--text-primary); font-weight: 700;">{{ topic_name }} Aptitude Test</h2>
+            <div style="color: var(--neon-cyan); font-weight: 700;">Question <span id="current-question">1</span> of 10</div>
+        </div>
+        <p style="color: var(--text-secondary); margin-top: 10px;">{% if phase == 'extra' %}10 Extra Questions{% else %}10 Topic Questions{% endif %}</p>
+    </div>
+    <div class="progress mb-4" style="height: 8px;"><div class="progress-bar" id="progress-bar" style="width: 10%; background: linear-gradient(90deg, var(--neon-blue), var(--neon-cyan));"></div></div>
+
+    <div id="question-area">
+    {% for index in range(10) %}{% set question = questions[index] %}
+        <div class="question-container mb-4 p-4 rounded border-0" id="question-{{ index }}" style="background: var(--card-bg); display: {% if index == 0 %}block{% else %}none{% endif %};">
+            <h5 style="color: var(--text-primary); font-weight: 600;">{{ question.question }}</h5>
+            <p style="color: var(--text-secondary);">Topic: {{ question.topic }}</p>
+            <div class="options mb-3">
+            {% for option in question.options %}{% set letter = 'ABCD'[loop.index0] %}
+                <div class="option mb-2"><input type="radio" name="answer-{{ index }}" value="{{ letter }}" id="q{{ index }}-{{ letter }}" onchange="answerQuestion({{ index }}, '{{ letter }}')"><label for="q{{ index }}-{{ letter }}" class="option-label"><strong>{{ letter }})</strong> {{ option }}</label></div>
+            {% endfor %}
+            </div>
+            <div id="feedback-{{ index }}" class="feedback mt-4 p-3 rounded" style="display:none; background: var(--bg-secondary);"></div>
+            <button type="button" class="btn btn-primary mt-3" id="next-{{ index }}" onclick="nextQuestion({{ index }})" disabled>{% if index == 9 %}Submit Test{% else %}Next Question{% endif %}</button>
+        </div>
+    {% endfor %}
+    </div>
+
+    <div id="result" class="card border-0 p-4" style="display:none; background: var(--card-bg);">
+        <h3 style="color:var(--text-primary);">{% if phase == 'extra' %}Final Combined Result{% else %}First 10 Questions Result{% endif %}</h3>
+        <div id="result-chart" style="width: 160px; height: 160px; border-radius: 50%; margin: 1rem auto;"></div>
+        <div class="row text-center" style="color:var(--text-secondary);">
+            <div class="col-6 col-md-3 mb-3">Total Questions<strong id="result-total" class="d-block"></strong></div>
+            <div class="col-6 col-md-3 mb-3">Correct Answers<strong id="result-correct" class="d-block"></strong></div>
+            <div class="col-6 col-md-3 mb-3">Wrong Answers<strong id="result-wrong" class="d-block"></strong></div>
+            <div class="col-6 col-md-3 mb-3">Score / Marks<strong id="result-score" class="d-block"></strong></div>
+            <div class="col-6 col-md-3">Percentage<strong id="result-percentage" class="d-block"></strong></div>
+            <div class="col-6 col-md-3">Overall Progress<strong id="result-progress" class="d-block"></strong></div>
+            <div class="col-12 mt-3" id="performance-wrap">Performance Level: <strong id="result-performance"></strong></div>
+        </div>
+        {% if phase == 'initial' %}<a class="btn btn-warning mt-4" href="{{ url_for('student.general_aptitude_topic_extra', topic_name=topic_name) }}">Extra Questions</a>{% endif %}
+        <a class="btn btn-primary mt-4" href="{{ url_for('student.aptitude_topics_list') }}">Back to Topics</a>
+    </div>
+</div>
+<script>
+const questions = {{ questions|tojson }};
+const answerState = {};
+let currentQuestion = 0;
+function answerQuestion(index, answer) {
+    if (answerState[index]) return;
+    answerState[index] = answer;
+    const question = questions[index];
+    const correct = answer === question.correct_answer;
+    document.querySelectorAll(`input[name="answer-${index}"]`).forEach(input => input.disabled = true);
+    const feedback = document.getElementById(`feedback-${index}`);
+    feedback.innerHTML = `<strong style="color:${correct ? '#28a745' : '#dc3545'}">${correct ? 'Correct' : 'Wrong'}</strong><br><strong>Correct Answer:</strong> ${question.correct_answer}<br><strong>Explanation:</strong> ${question.explanation}<br><strong>Concept:</strong> ${question.concept}`;
+    feedback.style.display = 'block';
+    document.getElementById(`next-${index}`).disabled = false;
+}
+function nextQuestion(index) {
+    if (!answerState[index]) return;
+    if (index < 9) {
+        currentQuestion = index + 1;
+        document.querySelectorAll('.question-container').forEach((item, itemIndex) => item.style.display = itemIndex === currentQuestion ? 'block' : 'none');
+        document.getElementById('current-question').textContent = currentQuestion + 1;
+        document.getElementById('progress-bar').style.width = `${(currentQuestion + 1) * 10}%`;
+        return;
+    }
+    fetch('{{ url_for("student.submit_general_aptitude_topic", topic_name=topic_name, phase=phase) }}', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({answers: answerState, questions: questions})})
+        .then(response => response.json().then(data => ({ok: response.ok, data})))
+        .then(({ok, data}) => {
+            if (!ok || !data.success) throw new Error(data.message || 'Submission failed.');
+            document.getElementById('question-area').style.display = 'none';
+            document.getElementById('result').style.display = 'block';
+            const values = {% if phase == 'extra' %}{total: data.combined_total, correct: data.combined_correct, wrong: data.combined_wrong, score: `${data.combined_score}/${data.combined_total}`, percentage: data.combined_percentage, progress: data.overall_progress, performance: 'Combined'}{% else %}{total: data.total, correct: data.correct, wrong: data.wrong, score: `${data.score}/${data.total}`, percentage: data.percentage, progress: data.percentage, performance: data.performance}{% endif %};
+            document.getElementById('result-total').textContent = values.total;
+            document.getElementById('result-correct').textContent = values.correct;
+            document.getElementById('result-wrong').textContent = values.wrong;
+            document.getElementById('result-score').textContent = values.score;
+            document.getElementById('result-percentage').textContent = `${values.percentage}%`;
+            document.getElementById('result-progress').textContent = `${values.progress}%`;
+            document.getElementById('result-performance').textContent = values.performance;
+            const angle = values.correct / values.total * 360;
+            document.getElementById('result-chart').style.background = `conic-gradient(#28a745 0deg ${angle}deg, #dc3545 ${angle}deg 360deg)`;
+        }).catch(error => alert(error.message));
+}
+</script>
+<style>
+.option-label { display:block; padding:12px; border:2px solid var(--text-muted); border-radius:8px; color:var(--text-primary); cursor:pointer; }
+.option-label:hover { background:var(--bg-secondary); border-color:var(--neon-cyan); }
+input[type=radio] { display:none; }
+input[type=radio]:checked + .option-label { background:linear-gradient(135deg,var(--neon-blue),var(--neon-cyan)); color:white; border-color:var(--neon-cyan); }
+</style>
+{% endblock %}

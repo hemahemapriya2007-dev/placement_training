@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block title %}HR Interview Practice{% endblock %}
+{% block content %}
+<section class="hr-interview-page">
+    <a class="hr-interview-back" href="{{ url_for('student.company_selection') }}">&larr; Companies</a>
+    <p class="hr-interview-kicker">{{ company.name }} / Interview Skill</p>
+    <h1>HR Interview <span>Practice</span></h1>
+    <p class="hr-interview-intro">Answer common HR questions one at a time and build stronger interview responses.</p>
+
+    <div class="hr-interview-stats">
+        <div><strong id="attempted-count">{{ attempted_count }}</strong><span>Questions Attempted</span></div>
+        <div><strong id="average-score">{{ average_score|round(1) }}/10</strong><span>Average Score</span></div>
+        <div><strong id="completion-percent">{{ ((attempted_count / total_questions) * 100)|round(0) }}%</strong><span>Completion</span></div>
+        <div><strong id="last-practice">{{ last_practice.strftime('%d %b %Y') if last_practice else 'Not yet' }}</strong><span>Last Practice</span></div>
+    </div>
+
+    <div class="hr-interview-card" id="practice-card">
+        <div class="hr-interview-progress"><span id="question-count"></span><i id="question-progress"></i></div>
+        <h2 id="question-text"></h2>
+        <textarea id="answer" rows="7" placeholder="Type your answer here..."></textarea>
+        <button class="btn btn-primary" id="submit-answer" type="button">Submit Response</button>
+        <div id="response-feedback" class="response-feedback" hidden>
+            <div class="feedback-score">Score: <strong id="score"></strong>/10</div>
+            <p><strong>Feedback:</strong> <span id="feedback"></span></p>
+            <p><strong>Area for improvement:</strong> <span id="improvement"></span></p>
+            <button class="btn btn-secondary" id="next-question" type="button">Next Question</button>
+        </div>
+    </div>
+</section>
+
+<style>
+.hr-interview-page{max-width:900px;margin:0 auto}.hr-interview-back{color:var(--neon-cyan);text-decoration:none}.hr-interview-kicker{color:var(--neon-cyan);font-size:.72rem;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-top:1rem}.hr-interview-page h1{color:var(--text-primary);font-weight:800;margin:.55rem 0}.hr-interview-page h1 span{color:var(--neon-cyan)}.hr-interview-intro{color:var(--text-secondary)}.hr-interview-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin:1.5rem 0}.hr-interview-stats div{padding:1rem;background:var(--card-bg);border:1px solid rgba(0,217,255,.18);border-radius:10px}.hr-interview-stats strong,.hr-interview-stats span{display:block}.hr-interview-stats strong{color:var(--neon-cyan);font-size:1.35rem}.hr-interview-stats span{color:var(--text-secondary);font-size:.75rem;margin-top:.25rem}.hr-interview-card{padding:clamp(1.2rem,4vw,2.2rem);border:1px solid rgba(0,217,255,.22);border-radius:14px;background:linear-gradient(145deg,rgba(16,22,42,.84),rgba(8,10,22,.76));box-shadow:0 14px 44px rgba(0,0,0,.35)}.hr-interview-progress{height:5px;background:rgba(255,255,255,.1);margin-bottom:1.8rem}.hr-interview-progress i{display:block;height:100%;background:var(--neon-cyan);transition:width .25s ease}.hr-interview-card h2{color:var(--text-primary);font-size:1.45rem;line-height:1.4}.hr-interview-card textarea{width:100%;margin:1rem 0;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text-primary);padding:.8rem;resize:vertical}.response-feedback{margin-top:1.3rem;padding:1rem;border-left:3px solid var(--neon-cyan);background:rgba(0,217,255,.07);color:var(--text-secondary);line-height:1.6}.feedback-score{color:var(--neon-cyan);font-size:1.15rem;margin-bottom:.7rem}.response-feedback p{margin:.5rem 0}.response-feedback strong{color:var(--text-primary)}@media(max-width:650px){.hr-interview-stats{grid-template-columns:repeat(2,1fr)}.hr-interview-card h2{font-size:1.2rem}}
+</style>
+<script>
+(() => {
+    const questions = {{ questions|tojson }};
+    const submitUrl = '{{ url_for("student.submit_hr_interview_answer", company_id=company.id) }}';
+    let current = {{ next_question }};
+    const answer = document.getElementById('answer');
+    const submit = document.getElementById('submit-answer');
+    const feedbackPanel = document.getElementById('response-feedback');
+    const next = document.getElementById('next-question');
+
+    function renderQuestion() {
+        if (current >= questions.length) {
+            document.getElementById('question-text').textContent = 'All HR interview questions completed.';
+            answer.hidden = true;
+            submit.hidden = true;
+            next.hidden = true;
+            return;
+        }
+        document.getElementById('question-count').textContent = `Question ${current + 1} of ${questions.length}`;
+        document.getElementById('question-progress').style.width = `${((current + 1) / questions.length) * 100}%`;
+        document.getElementById('question-text').textContent = questions[current];
+        answer.value = '';
+        answer.disabled = false;
+        submit.hidden = false;
+        submit.disabled = false;
+        feedbackPanel.hidden = true;
+        answer.focus();
+    }
+
+    submit.addEventListener('click', async () => {
+        if (!answer.value.trim()) {
+            answer.focus();
+            return;
+        }
+        submit.disabled = true;
+        answer.disabled = true;
+        const response = await fetch(submitUrl, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({question_number: current, answer: answer.value})
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            submit.disabled = false;
+            answer.disabled = false;
+            alert(data.message || 'Could not submit your response.');
+            return;
+        }
+        document.getElementById('score').textContent = data.score;
+        document.getElementById('feedback').textContent = data.feedback;
+        document.getElementById('improvement').textContent = data.improvement;
+        document.getElementById('attempted-count').textContent = data.attempted_count;
+        document.getElementById('completion-percent').textContent = `${Math.round(data.attempted_count / data.total_questions * 100)}%`;
+        document.getElementById('last-practice').textContent = 'Just now';
+        feedbackPanel.hidden = false;
+    });
+
+    next.addEventListener('click', () => {
+        current += 1;
+        renderQuestion();
+    });
+
+    renderQuestion();
+})();
+</script>
+{% endblock %}

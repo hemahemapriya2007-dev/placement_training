@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}Placement Training System{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
@@ -12,30 +15,44 @@
     <div class="floating-bubble floating-bubble-1"></div>
     <div class="floating-bubble floating-bubble-2"></div>
     <div class="floating-bubble floating-bubble-3"></div>
+    <div class="cosmic-system" aria-hidden="true">
+        <div class="cosmic-stars cosmic-stars-one"></div>
+        <div class="cosmic-stars cosmic-stars-two"></div>
+        <div class="cosmic-nebula cosmic-nebula-blue"></div>
+        <div class="cosmic-nebula cosmic-nebula-purple"></div>
+        <div class="cosmic-sun"><span></span></div>
+        <div class="cosmic-orbit cosmic-orbit-one"><i class="cosmic-planet cosmic-planet-blue"></i></div>
+        <div class="cosmic-orbit cosmic-orbit-two"><i class="cosmic-planet cosmic-planet-purple"></i></div>
+        <div class="cosmic-orbit cosmic-orbit-three"><i class="cosmic-planet cosmic-planet-cyan"></i></div>
+    </div>
 
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('auth.index') }}">Placement Training</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navMenu">
-                <ul class="navbar-nav ms-auto">
+    <nav class="navbar navbar-expand-lg navbar-dark app-topbar">
+        <div class="container-fluid app-topbar-inner">
+            <button class="navbar-toggler app-menu-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
+            <a class="navbar-brand" href="{{ url_for('auth.index') }}"><span class="brand-mark">P</span><span>Placement<span class="brand-muted">.OS</span></span></a>
+            <div class="topbar-context"><span class="context-dot"></span><span>Learning workspace</span></div>
+            <div class="topbar-tools"><div class="topbar-search"><span>⌕</span><input type="search" placeholder="Search workspace" aria-label="Search workspace"></div><button class="topbar-notify" type="button" aria-label="Notifications">◌<i></i></button></div>
+            <div class="collapse navbar-collapse app-sidebar" id="navMenu">
+                <div class="sidebar-label">Workspace</div>
+                <ul class="navbar-nav">
                     {% if current_user.is_authenticated %}
                         {% if current_user.__class__.__name__ == 'Student' %}
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('student.dashboard') }}">Dashboard</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('student.company_selection') }}">Companies</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('student.progress') }}">Progress</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.logout') }}">Logout</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('student.dashboard') }}"><span class="nav-glyph">⌂</span>Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('student.company_selection') }}"><span class="nav-glyph">◈</span>Companies</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('student.progress') }}"><span class="nav-glyph">◒</span>Progress</a></li>
                         {% else %}
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.admin_logout') }}">Logout</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.dashboard') }}"><span class="nav-glyph">⌂</span>Admin Dashboard</a></li>
                         {% endif %}
                     {% else %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.student_login') }}">Student Login</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.admin_login') }}">Admin Login</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.student_login') }}"><span class="nav-glyph">→</span>Student Login</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.admin_login') }}"><span class="nav-glyph">▣</span>Admin Login</a></li>
                     {% endif %}
                 </ul>
+                <div class="sidebar-spacer"></div>
+                {% if current_user.is_authenticated %}
+                    <div class="sidebar-user"><span class="user-avatar">{{ (current_user.name[0] if current_user.name else 'U')|upper }}</span><span><strong>{{ current_user.name or 'Workspace user' }}</strong><small>{{ 'Student' if current_user.__class__.__name__ == 'Student' else 'Administrator' }}</small></span></div>
+                    <a class="nav-link sidebar-logout" href="{{ url_for('auth.logout' if current_user.__class__.__name__ == 'Student' else 'auth.admin_logout') }}"><span class="nav-glyph">↪</span>Sign out</a>
+                {% endif %}
             </div>
         </div>
     </nav>

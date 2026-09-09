@@ -12,7 +12,7 @@
         <div class="card border-0 h-100">
             <div class="card-body p-4">
                 <div class="d-flex justify-content-between align-items-start mb-3">
-                    <h5 style="font-weight: 700; color: var(--text-primary); font-style: italic;">{{ company.name }}</h5>
+                    <div class="company-heading"><span class="company-logo" aria-hidden="true">{{ company.name[:2]|upper }}</span><h5 style="font-weight: 700; color: var(--text-primary); font-style: italic;">{{ company.name }}</h5></div>
                     {% if company.id in selected_company_ids %}
                         <span class="badge bg-success" style="background: rgba(100, 100, 100, 0.5) !important; border: 1px solid rgba(255, 255, 255, 0.3); color: var(--accent-light); font-style: italic;">✓ Selected</span>
                     {% endif %}

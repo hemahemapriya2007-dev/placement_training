@@ -9,10 +9,12 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 
 from placement_training import db
-from placement_training.models import Company, Skill, StudentSkill, StudentCompany, StudentCompanySkill, LearningPlan, Task, StudentTask, Test, TestResult, Progress, Resume, Certificate, MockInterview, CompanySkill, GroupDiscussionResult
-from placement_training.services.progress_service import calculate_student_progress, get_leaderboard
+from placement_training.models import Company, Skill, StudentSkill, StudentCompany, StudentCompanySkill, LearningPlan, Task, StudentTask, Test, TestResult, Progress, Resume, Certificate, MockInterview, HRInterviewAttempt, CompanySkill, GroupDiscussionSession, GroupDiscussionParticipant, GroupDiscussionResult, AptitudeQuestionAttempt
+from placement_training.services.progress_service import calculate_student_progress, ensure_company_skills, get_leaderboard, get_skill_progress
 from placement_training.services.recommendation_service import recommend_skills
 from placement_training.services.aptitude_practice_service import COMPANY_TOPICS, company_bank, extra_questions
+from placement_training.services.skill_mcq_service import assessment_questions
+from placement_training.services.data_structures_service import DATA_STRUCTURE_MCQ, PROGRAMMING_BASICS, validate_programming_answer
 from sqlalchemy.orm import joinedload
 import re
 
@@ -89,6 +91,18 @@ TEXT_SKILL_PROMPTS = {
     'Communication': ['Tell me about yourself.', 'Why should we hire you?', 'What are your strengths?', 'Describe a challenging situation.', 'Explain your final year project.', 'Where do you see yourself in five years?', 'How do you handle feedback?'],
     'Interview Skills': ['Introduce yourself professionally.', 'Why do you want to join our company?', 'What are your career goals?', 'Describe your strengths and weaknesses.', 'Explain a difficult situation you handled.', 'Why should we hire you?', 'What achievement are you proud of?'],
 }
+HR_INTERVIEW_QUESTIONS = [
+    'Tell me about yourself.',
+    'Why should we hire you?',
+    'What are your strengths?',
+    'What are your weaknesses?',
+    'Why do you want to join our company?',
+    'Where do you see yourself in 5 years?',
+    'Describe a challenge you faced and how you handled it.',
+    'What are your career goals?',
+    'Why did you choose your degree?',
+    'Do you have any questions for us?',
+]
 COMMUNICATION_COMPANY_PROMPTS = {
     'Infosys': ['Your manager rejects a well-researched automation idea. How would you respond?', 'A teammate takes credit for your contribution in a client meeting. What would you do?', 'You discover a mistake in a report just before a review. How do you handle it?', 'You are asked to learn a new tool in two days for a delivery. What is your plan?', 'Two colleagues disagree and both ask you to take sides. How would you help?'],
     'TCS': ['An important task may miss its deadline because of a dependency. What would you communicate?', 'A senior disagrees with your technical suggestion. How would you present your view?', 'You receive negative feedback despite strong effort. How do you respond?', 'Your team is remote and a message is misunderstood. How would you repair the situation?', 'You have two competing priorities from different stakeholders. What would you do?'],
@@ -340,11 +354,27 @@ def dashboard():
     companies = Company.query.all()
     progress = Progress.query.filter_by(student_id=current_user.id).first()
     leaderboard = get_leaderboard()[:5]
-    from placement_training.models import AptitudeAttempt, GeneralAptitudeTest
+    from placement_training.models import AptitudeAttempt, AptitudeQuestionAttempt, GeneralAptitudeTest
+    interview_skill = Skill.query.filter(Skill.name.in_(['Interview', 'Interview Skills'])).first()
+    interview_attempts = HRInterviewAttempt.query.filter_by(
+        student_id=current_user.id, company_id=current_user.dream_company_id
+    ).order_by(HRInterviewAttempt.submitted_at.desc()).all()
+    interview_questions_attempted = len({attempt.question_number for attempt in interview_attempts})
     completed_tasks = sum(1 for task in current_user.task_records if task.completed)
     completed_tasks += AptitudeAttempt.query.filter_by(student_id=current_user.id).count()
     completed_tasks += GeneralAptitudeTest.query.filter_by(student_id=current_user.id, status='completed').count()
-    return render_template('student_dashboard.html', companies=companies, progress=progress, leaderboard=leaderboard, completed_tasks=completed_tasks)
+    return render_template(
+        'student_dashboard.html',
+        companies=companies,
+        progress=progress,
+        leaderboard=leaderboard,
+        completed_tasks=completed_tasks,
+        interview_questions_attempted=interview_questions_attempted,
+        interview_average_score=(sum(attempt.score for attempt in interview_attempts) / len(interview_attempts)) if interview_attempts else 0,
+        interview_completion_percentage=interview_questions_attempted / 10 * 100,
+        interview_last_practice=interview_attempts[0].submitted_at if interview_attempts else None,
+        interview_skill=interview_skill,
+    )
 
 
 @student_bp.route('/student/company-selection', methods=['GET', 'POST'])
@@ -409,6 +439,7 @@ def company_selection():
         else:
             record = StudentCompany(student_id=current_user.id, company_id=company.id, status='selected')
             db.session.add(record)
+            ensure_company_skills(current_user.id, company.id)
             db.session.commit()
             flash(f'Company {company.name} selected.', 'success')
 
@@ -447,6 +478,46 @@ def generate_aptitude_questions(company_id):
     return jsonify({'success': True, 'questions': _company_questions(company.id, company.name, limit=5)})
 
 
+@student_bp.route('/student/aptitude/<int:company_id>/submit', methods=['POST'])
+@login_required
+def submit_aptitude_assessment(company_id):
+    """Store the score for the legacy company aptitude assessment."""
+    from placement_training.models import AptitudeAttempt, AptitudeTopic
+
+    company = Company.query.get_or_404(company_id)
+    data = request.get_json(silent=True) or {}
+    questions = data.get('questions') or _company_questions(company.id, company.name)
+    answers = data.get('answers') or {}
+    correct_count = sum(
+        1 for index, question in enumerate(questions)
+        if answers.get(str(index), answers.get(index)) == question.get('answer')
+    )
+    total = len(questions)
+    percentage = round((correct_count / total) * 100, 2) if total else 0
+    topic = AptitudeTopic.query.filter_by(name='Aptitude').first()
+    if not topic:
+        topic = AptitudeTopic(name='Aptitude', description='Company aptitude assessment')
+        db.session.add(topic)
+        db.session.flush()
+    db.session.add(AptitudeAttempt(
+        student_id=current_user.id,
+        topic_id=topic.id,
+        total_questions=total,
+        correct_answers=correct_count,
+        wrong_answers=total - correct_count,
+        score=correct_count,
+        percentage=percentage,
+    ))
+    try:
+        db.session.flush()
+        calculate_student_progress(current_user.id)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Could not save aptitude progress.'}), 500
+    return jsonify({'success': True, 'score': correct_count, 'total': total, 'percentage': percentage})
+
+
 @student_bp.route('/student/aptitude-practice/<int:company_id>')
 @login_required
 def aptitude_practice(company_id):
@@ -471,8 +542,31 @@ def skill_assessment(company_id, skill_id):
         return redirect(url_for('student.aptitude_topics_list', company_id=company.id))
     if skill.name == 'Group Discussion':
         return redirect(url_for('student.group_discussion_list'))
+    if skill.name == 'Data Structures':
+        return render_template(
+            'data_structures_learning.html',
+            company=company,
+            skill=skill,
+            questions=DATA_STRUCTURE_MCQ,
+            programming_questions=PROGRAMMING_BASICS,
+        )
+    if skill.name == 'Communication Skills':
+        return render_template('communication_options.html', company=company, skill=skill)
+    if skill.name == 'SQL':
+        return render_template('sql_assessment.html', company=company, skill=skill, questions=_skill_questions(company.id, company.name, skill.name))
+    if skill.name in {'Logical Reasoning'}:
+        question_count = 10 if skill.name == 'Logical Reasoning' else 5
+        return render_template(
+            'skill_mcq_assessment.html',
+            company=company,
+            skill=skill,
+            questions=assessment_questions(skill.name, current_user.id, company.id, session),
+            question_count=question_count,
+        )
     if skill.name == 'Programming':
         return redirect(url_for('student.programming_assessment', company_id=company_id))
+    if skill.name.lower() in {'interview', 'interview skills'}:
+        return redirect(url_for('student.hr_interview_practice', company_id=company_id, skill_id=skill_id))
     if skill.name in TEXT_SKILL_PROMPTS:
         prompts = COMMUNICATION_COMPANY_PROMPTS.get(company.name, TEXT_SKILL_PROMPTS[skill.name])
         return render_template('communication_assessment.html', company=company, skill=skill, prompts=prompts)
@@ -480,6 +574,214 @@ def skill_assessment(company_id, skill_id):
         return render_template('technical_interview.html', company=company, skill=skill, questions=_technical_questions(company.id, company.name))
     questions = _skill_questions(company.id, company.name, skill.name)
     return render_template('skill_assessment.html', company=company, skill=skill, questions=questions)
+
+
+@student_bp.route('/student/skill-mcq/<int:company_id>/<int:skill_id>/submit', methods=['POST'])
+@login_required
+def submit_skill_mcq(company_id, skill_id):
+    """Persist the latest additive MCQ assessment score using existing skill progress."""
+    company = Company.query.get_or_404(company_id)
+    skill = Skill.query.get_or_404(skill_id)
+    if skill.name not in {'Logical Reasoning', 'Communication Skills', 'SQL'}:
+        return jsonify({'success': False, 'message': 'Assessment not found.'}), 404
+    data = request.get_json(silent=True) or {}
+    score = max(0, int(data.get('score', 0)))
+    total = 10 if skill.name in {'Logical Reasoning', 'SQL'} else 5
+    percentage = round(score / total * 100, 2)
+    record = StudentSkill.query.filter_by(student_id=current_user.id, skill_id=skill.id).first()
+    if not record:
+        record = StudentSkill(student_id=current_user.id, skill_id=skill.id)
+        db.session.add(record)
+    record.score = percentage
+    record.completion_percent = percentage
+    record.completed = True
+    record.completed_at = datetime.utcnow()
+    try:
+        db.session.flush()
+        calculate_student_progress(current_user.id, company.id)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Could not save assessment progress.'}), 500
+    return jsonify({'success': True, 'student_id': current_user.id, 'skill': skill.name, 'score': score, 'total': total, 'percentage': percentage, 'completed_at': datetime.utcnow().isoformat()})
+
+
+@student_bp.route('/student/communication-verbal/<int:company_id>/<int:skill_id>/<mode>')
+@login_required
+def communication_verbal_assessment(company_id, skill_id, mode):
+    from placement_training.services.communication_verbal_service import get_questions
+
+    company = Company.query.get_or_404(company_id)
+    skill = Skill.query.get_or_404(skill_id)
+    if skill.name != 'Communication Skills' or mode not in {'verbal_mcq', 'fill_blanks'}:
+        return redirect(url_for('student.company_selection'))
+    return render_template(
+        'communication_verbal_assessment.html', company=company, skill=skill,
+        mode=mode, questions=get_questions(company.name, mode), total_questions=5,
+    )
+
+
+@student_bp.route('/student/communication-verbal/<int:company_id>/<int:skill_id>/<mode>/submit', methods=['POST'])
+@login_required
+def submit_communication_verbal(company_id, skill_id, mode):
+    company = Company.query.get_or_404(company_id)
+    skill = Skill.query.get_or_404(skill_id)
+    if skill.name != 'Communication Skills' or mode not in {'verbal_mcq', 'fill_blanks'}:
+        return jsonify({'success': False, 'message': 'Assessment not found.'}), 404
+    data = request.get_json(silent=True) or {}
+    answers = data.get('answers', {})
+    correct = sum(str(answers.get(str(index))) == str(item.get('answer')) for index, item in enumerate(data.get('questions', [])))
+    total = 5
+    percentage = round(correct / total * 100, 2)
+    record = StudentSkill.query.filter_by(student_id=current_user.id, skill_id=skill.id).first()
+    if not record:
+        record = StudentSkill(student_id=current_user.id, skill_id=skill.id)
+        db.session.add(record)
+    record.score = percentage
+    record.completion_percent = percentage
+    record.completed = True
+    record.completed_at = datetime.utcnow()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Could not save the verbal MCQ result.'}), 500
+    return jsonify({'success': True, 'total': total, 'correct': correct, 'wrong': total - correct, 'score': correct, 'percentage': percentage, 'status': 'Completed'})
+
+
+@student_bp.route('/student/data-structures/<int:company_id>/<int:skill_id>/submit', methods=['POST'])
+@login_required
+def submit_data_structures_assessment(company_id, skill_id):
+    """Save the Data Structures MCQ score through the existing skill progress model."""
+    company = Company.query.get_or_404(company_id)
+    skill = Skill.query.get_or_404(skill_id)
+    if skill.name != 'Data Structures':
+        return jsonify({'success': False, 'message': 'Assessment not found.'}), 404
+    data = request.get_json(silent=True) or {}
+    score = max(0, min(len(DATA_STRUCTURE_MCQ), int(data.get('score', 0))))
+    percentage = round(score / len(DATA_STRUCTURE_MCQ) * 100, 2)
+    record = StudentSkill.query.filter_by(student_id=current_user.id, skill_id=skill.id).first()
+    if not record:
+        record = StudentSkill(student_id=current_user.id, skill_id=skill.id)
+        db.session.add(record)
+    record.score = percentage
+    record.completion_percent = percentage
+    record.completed = True
+    record.completed_at = datetime.utcnow()
+    try:
+        db.session.flush()
+        calculate_student_progress(current_user.id, company.id)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Could not save assessment progress.'}), 500
+    return jsonify({'success': True, 'score': score, 'total': len(DATA_STRUCTURE_MCQ), 'percentage': percentage})
+
+
+@student_bp.route('/student/data-structures/<int:company_id>/<int:skill_id>/programming-submit', methods=['POST'])
+@login_required
+def submit_data_structures_programming(company_id, skill_id):
+    company = Company.query.get_or_404(company_id)
+    skill = Skill.query.get_or_404(skill_id)
+    if skill.name != 'Data Structures':
+        return jsonify({'success': False, 'message': 'Practice not found.'}), 404
+    data = request.get_json(silent=True) or {}
+    question_index = int(data.get('question_index', -1))
+    if question_index < 0 or question_index >= len(PROGRAMMING_BASICS):
+        return jsonify({'success': False, 'message': 'Practice question not found.'}), 400
+    correct = validate_programming_answer(question_index, data.get('code', ''))
+    return jsonify({'success': True, 'correct': correct, 'hint_level': 2 if data.get('hint_level') else 1})
+
+
+@student_bp.route('/student/interview-practice/<int:company_id>/<int:skill_id>')
+@login_required
+def hr_interview_practice(company_id, skill_id):
+    company = Company.query.get_or_404(company_id)
+    skill = Skill.query.get_or_404(skill_id)
+    if skill.name.lower() not in {'interview', 'interview skills'}:
+        flash('This practice section is only available for Interview Skill.', 'warning')
+        return redirect(url_for('student.company_selection'))
+
+    attempts = HRInterviewAttempt.query.filter_by(
+        student_id=current_user.id, company_id=company_id
+    ).order_by(HRInterviewAttempt.submitted_at.desc()).all()
+    attempted_numbers = {attempt.question_number for attempt in attempts}
+    next_question = next(
+        (index for index in range(len(HR_INTERVIEW_QUESTIONS)) if index not in attempted_numbers),
+        0,
+    )
+    return render_template(
+        'hr_interview_practice.html',
+        company=company,
+        skill=skill,
+        questions=HR_INTERVIEW_QUESTIONS,
+        next_question=next_question,
+        attempted_count=len(attempted_numbers),
+        total_questions=len(HR_INTERVIEW_QUESTIONS),
+        average_score=(sum(attempt.score for attempt in attempts) / len(attempts)) if attempts else 0,
+        last_practice=attempts[0].submitted_at if attempts else None,
+    )
+
+
+@student_bp.route('/student/interview-practice/<int:company_id>/submit', methods=['POST'])
+@login_required
+def submit_hr_interview_answer(company_id):
+    company = Company.query.get_or_404(company_id)
+    data = request.get_json(silent=True) or {}
+    question_number = int(data.get('question_number', -1))
+    answer = str(data.get('answer', '')).strip()
+    if question_number < 0 or question_number >= len(HR_INTERVIEW_QUESTIONS) or not answer:
+        return jsonify({'success': False, 'message': 'A question and answer are required.'}), 400
+
+    existing = HRInterviewAttempt.query.filter_by(
+        student_id=current_user.id,
+        company_id=company_id,
+        question_number=question_number,
+    ).first()
+    if existing:
+        attempted_count = HRInterviewAttempt.query.filter_by(
+            student_id=current_user.id, company_id=company_id
+        ).count()
+        return jsonify({
+            'success': True,
+            'score': existing.score,
+            'feedback': existing.feedback,
+            'improvement': existing.improvement,
+            'attempted_count': attempted_count,
+            'total_questions': len(HR_INTERVIEW_QUESTIONS),
+        })
+
+    question = HR_INTERVIEW_QUESTIONS[question_number]
+    words = answer.split()
+    lower_answer = answer.lower()
+    useful_terms = ('experience', 'project', 'team', 'learn', 'problem', 'result', 'goal', 'company')
+    score = min(10, max(1, len(words) // 12 + sum(term in lower_answer for term in useful_terms)))
+    if len(words) >= 35:
+        score = min(10, score + 2)
+    feedback = 'Good start. Your answer is relevant and gives the interviewer useful context.' if score >= 7 else 'Your answer has a useful starting point, but it needs more specific evidence.'
+    improvement = 'Add one concrete example, explain your action, and finish with the result.' if score < 7 else 'Make the example even stronger by quantifying the result or connecting it to this role.'
+
+    attempt = HRInterviewAttempt(
+        student_id=current_user.id,
+        company_id=company_id,
+        question_number=question_number,
+        question=question,
+        answer=answer,
+        score=score,
+        feedback=feedback,
+        improvement=improvement,
+    )
+    db.session.add(attempt)
+    db.session.commit()
+    calculate_student_progress(current_user.id, company_id)
+    return jsonify({
+        'success': True,
+        'score': score,
+        'feedback': feedback,
+        'improvement': improvement,
+        'attempted_count': HRInterviewAttempt.query.filter_by(student_id=current_user.id, company_id=company_id).count(),
+        'total_questions': len(HR_INTERVIEW_QUESTIONS),
+    })
 
 
 @student_bp.route('/student/company/<int:company_id>/deselect', methods=['POST'])
@@ -655,7 +957,9 @@ def submit_test(test_id):
 @student_bp.route('/student/progress')
 @login_required
 def progress():
-    record = calculate_student_progress(current_user.id)
+    company_id = current_user.dream_company_id
+    record = calculate_student_progress(current_user.id, company_id)
+    skill_progress = get_skill_progress(current_user.id, company_id)
     from placement_training.models import AptitudeAttempt, GeneralAptitudeTest
 
     aptitude_history = AptitudeAttempt.query.filter_by(student_id=current_user.id).order_by(AptitudeAttempt.completed_at.desc()).all()
@@ -663,6 +967,10 @@ def progress():
     aptitude_scores = [attempt.percentage for attempt in aptitude_history]
     aptitude_scores.extend(test.percentage for test in general_history if test.status == 'completed')
     aptitude_performance = sum(aptitude_scores) / len(aptitude_scores) if aptitude_scores else 0
+    aptitude_answers = AptitudeQuestionAttempt.query.filter_by(student_id=current_user.id).all()
+    aptitude_attempted = len(aptitude_answers)
+    aptitude_correct = sum(1 for answer in aptitude_answers if answer.correct)
+    aptitude_wrong = aptitude_attempted - aptitude_correct
     discussion_results = GroupDiscussionResult.query.filter_by(student_id=current_user.id).all()
     discussion_performance = sum(item.overall_score for item in discussion_results) / len(discussion_results) if discussion_results else 0
     completed_tasks = sum(1 for task in current_user.task_records if task.completed)
@@ -673,12 +981,18 @@ def progress():
     return render_template(
         'progress.html',
         record=record,
+        skill_progress=skill_progress,
         aptitude_history=aptitude_history,
         general_history=general_history,
         completed_tasks=completed_activities,
         remaining_tasks=max(total_available_tasks - completed_activities, 0),
         total_available_tasks=total_available_tasks,
         aptitude_performance=aptitude_performance,
+        aptitude_attempted=aptitude_attempted,
+        aptitude_correct=aptitude_correct,
+        aptitude_wrong=aptitude_wrong,
+        aptitude_completed_tests=len(aptitude_history),
+        aptitude_progress=(aptitude_correct / aptitude_attempted * 100) if aptitude_attempted else 0,
         discussion_performance=discussion_performance,
     )
 
@@ -759,39 +1073,162 @@ def aptitude_topics_list():
     from placement_training.services.aptitude_topics_service import get_all_topics, APTITUDE_TOPICS
     topics = get_all_topics()
     topic_data = [(topic, APTITUDE_TOPICS[topic]['description']) for topic in topics]
-    company_id = request.args.get('company_id', type=int)
-    company = Company.query.get(company_id) if company_id else None
+    company_id = request.args.get('company_id', type=int) or current_user.dream_company_id
+    company = Company.query.get(company_id) if company_id else Company.query.order_by(Company.id).first()
     return render_template('aptitude_topics.html', topics=topic_data, company=company)
+
+
+@student_bp.route('/student/general-aptitude-topic/<topic_name>')
+@login_required
+def general_aptitude_topic(topic_name):
+    from placement_training.models import TopicAptitudeAnswer
+    from placement_training.services.aptitude_topics_service import APTITUDE_TOPICS, get_topic_assessment_questions
+
+    if topic_name != 'General' and topic_name not in APTITUDE_TOPICS:
+        flash('Topic not found.', 'danger')
+        return redirect(url_for('student.aptitude_topics_list'))
+    attempted = {
+        answer.question_key for answer in TopicAptitudeAnswer.query.filter_by(
+            student_id=current_user.id, topic_name=topic_name
+        ).all()
+    }
+    questions = get_topic_assessment_questions(topic_name, count=10, exclude_keys=attempted)
+    if len(questions) < 10:
+        flash('No new questions are available for this topic yet.', 'info')
+        return redirect(url_for('student.aptitude_topics_list'))
+    session_key = f'topic_aptitude:{current_user.id}:{topic_name}:initial'
+    session[session_key] = questions
+    session.modified = True
+    return render_template(
+        'general_aptitude_topic.html', topic_name=topic_name, phase='initial',
+        questions=questions, total_questions=10,
+    )
+
+
+@student_bp.route('/student/general-aptitude-topic-extra/<topic_name>')
+@login_required
+def general_aptitude_topic_extra(topic_name):
+    from placement_training.models import TopicAptitudeAnswer, TopicAptitudeTest
+    from placement_training.services.aptitude_topics_service import APTITUDE_TOPICS, get_topic_assessment_questions
+
+    if topic_name != 'General' and topic_name not in APTITUDE_TOPICS:
+        flash('Topic not found.', 'danger')
+        return redirect(url_for('student.aptitude_topics_list'))
+    initial_test = TopicAptitudeTest.query.filter_by(
+        student_id=current_user.id, topic_name=topic_name, phase='initial'
+    ).first()
+    if not initial_test:
+        flash('Complete the first 10-question test before starting extra questions.', 'info')
+        return redirect(url_for('student.general_aptitude_topic', topic_name=topic_name))
+    attempted = {
+        answer.question_key for answer in TopicAptitudeAnswer.query.filter_by(
+            student_id=current_user.id, topic_name=topic_name
+        ).all()
+    }
+    questions = get_topic_assessment_questions(topic_name, extra=True, count=10, exclude_keys=attempted)
+    if len(questions) < 10:
+        flash('No new extra questions are available for this topic yet.', 'info')
+        return redirect(url_for('student.aptitude_topics_list'))
+    session_key = f'topic_aptitude:{current_user.id}:{topic_name}:extra'
+    session[session_key] = questions
+    session.modified = True
+    return render_template(
+        'general_aptitude_topic.html', topic_name=topic_name, phase='extra',
+        questions=questions, total_questions=10,
+    )
+
+
+@student_bp.route('/student/general-aptitude-topic-submit/<topic_name>/<phase>', methods=['POST'])
+@login_required
+def submit_general_aptitude_topic(topic_name, phase):
+    from placement_training.models import TopicAptitudeAnswer, TopicAptitudeTest
+    from placement_training.services.aptitude_topics_service import APTITUDE_TOPICS
+
+    if phase not in ('initial', 'extra') or (topic_name != 'General' and topic_name not in APTITUDE_TOPICS):
+        return jsonify({'success': False, 'message': 'Invalid aptitude topic or phase.'}), 404
+    session_key = f'topic_aptitude:{current_user.id}:{topic_name}:{phase}'
+    questions = session.get(session_key, [])
+    data = request.get_json(silent=True) or {}
+    answers = data.get('answers', {})
+    if len(questions) != 10:
+        questions = data.get('questions', [])
+    if len(questions) != 10:
+        return jsonify({'success': False, 'message': 'Unable to resume this aptitude test.'}), 400
+    if any(TopicAptitudeAnswer.query.filter_by(
+        student_id=current_user.id, topic_name=topic_name, question_key=question['question_key']
+    ).first() for question in questions):
+        return jsonify({'success': False, 'message': 'A question in this test was already attempted.'}), 409
+
+    correct = sum(answers.get(str(index)) == question['correct_answer'] for index, question in enumerate(questions))
+    test = TopicAptitudeTest(
+        student_id=current_user.id, topic_name=topic_name, phase=phase,
+        total_questions=10, correct_answers=correct, wrong_answers=10 - correct,
+        score=correct, percentage=correct * 10,
+    )
+    db.session.add(test)
+    db.session.flush()
+    for index, question in enumerate(questions):
+        selected = answers.get(str(index), '')
+        db.session.add(TopicAptitudeAnswer(
+            test_id=test.id, student_id=current_user.id, topic_name=topic_name,
+            question_key=question['question_key'], question_text=question['question'],
+            selected_answer=selected, correct_answer=question['correct_answer'],
+            is_correct=selected == question['correct_answer'], explanation=question['explanation'],
+            concept=question['concept'],
+        ))
+    db.session.commit()
+
+    result = {'success': True, 'total': 10, 'correct': correct, 'wrong': 10 - correct,
+              'score': correct, 'percentage': correct * 10,
+              'performance': 'Good' if correct >= 8 else 'Average' if correct >= 5 else 'Medium'}
+    if phase == 'extra':
+        initial = TopicAptitudeTest.query.filter_by(
+            student_id=current_user.id, topic_name=topic_name, phase='initial'
+        ).order_by(TopicAptitudeTest.completed_at.desc()).first()
+        initial_correct = initial.correct_answers if initial else 0
+        total_correct = initial_correct + correct
+        result.update({'combined_total': 20, 'combined_correct': total_correct,
+                       'combined_wrong': 20 - total_correct, 'combined_score': total_correct,
+                       'combined_percentage': total_correct * 5,
+                       'overall_progress': total_correct * 5})
+    return jsonify(result)
 
 
 @student_bp.route('/student/aptitude-topic-test/<topic_name>')
 @login_required
 def aptitude_topic_test(topic_name):
     """Start a topic-based aptitude test with 5 questions"""
-    from placement_training.services.aptitude_topics_service import get_topic_questions, APTITUDE_TOPICS
+    from placement_training.models import AptitudeQuestion, AptitudeTopic
+    from placement_training.services.aptitude_topics_service import APTITUDE_TOPICS
     
     if topic_name not in APTITUDE_TOPICS:
         flash('Topic not found.', 'danger')
         return redirect(url_for('student.aptitude_topics_list'))
     
-    company_id = request.args.get('company_id', type=int)
-    company = Company.query.get(company_id) if company_id else None
-    questions = get_topic_questions(topic_name)[:5]
-    if company:
-        from placement_training.models import AptitudeQuestionAttempt
-        session_key = f'aptitude_session:{current_user.id}:{company.id}:{topic_name}'
-        attempted = set()
-        from placement_training.models import AptitudeTopic
-        topic_record = AptitudeTopic.query.filter_by(name=topic_name).first()
-        if topic_record:
-            attempted = {item.question_key for item in AptitudeQuestionAttempt.query.filter_by(
-                student_id=current_user.id, company_id=company.id, topic_id=topic_record.id
-            ).all()}
-        available = [item for item in get_topic_questions(topic_name) if item.get('question_key') not in attempted]
-        questions = (available if len(available) >= 5 else get_topic_questions(topic_name))[:5]
-        session[session_key] = [item.get('question_key') for item in questions]
-        session.modified = True
-    return render_template('aptitude_topic_test.html', topic_name=topic_name, questions=questions[:5], total_questions=5, company=company)
+    company_id = request.args.get('company_id', type=int) or current_user.dream_company_id
+    company = Company.query.get(company_id) if company_id else Company.query.order_by(Company.id).first()
+    if not company:
+        flash('Select a company before starting an aptitude test.', 'warning')
+        return redirect(url_for('student.company_selection'))
+    topic_record = AptitudeTopic.query.filter_by(name=topic_name).first()
+    questions = AptitudeQuestion.query.filter_by(
+        company_id=company.id, topic_id=topic_record.id
+    ).order_by(AptitudeQuestion.id).limit(5).all() if topic_record else []
+    if len(questions) < 5:
+        flash('This company does not have five questions for this topic yet.', 'warning')
+        return redirect(url_for('student.aptitude_topics_list', company_id=company.id))
+    session_key = f'aptitude_session:{current_user.id}:{company.id}:{topic_name}'
+    session[session_key] = [question.id for question in questions]
+    session.modified = True
+    question_data = [{
+        'id': question.id,
+        'question': question.question_text,
+        'options': [question.option_a, question.option_b, question.option_c, question.option_d],
+        'correct_answer': question.correct_answer,
+        'explanation': question.explanation or 'Review the values and apply the stated rule.',
+        'concept': question.concept_definition or topic_record.description,
+    } for question in questions]
+    return render_template('aptitude_topic_test.html', topic_name=topic_name, questions=question_data, total_questions=5, company=company)
 
 
 @student_bp.route('/student/aptitude-topic-submit/<topic_name>', methods=['POST'])
@@ -799,35 +1236,45 @@ def aptitude_topic_test(topic_name):
 def submit_aptitude_topic(topic_name):
     """Submit topic test answers and save results"""
     from placement_training.services.aptitude_topics_service import APTITUDE_TOPICS
-    from placement_training.models import AptitudeAttempt, AptitudeTopic, AptitudeQuestionAttempt
+    from placement_training.models import AptitudeAttempt, AptitudeTopic, AptitudeQuestion, AptitudeQuestionAttempt
     
     if topic_name not in APTITUDE_TOPICS:
         return jsonify({'success': False, 'message': 'Topic not found.'}), 404
     
     data = request.get_json(silent=True) or {}
     answers = data.get('answers', {})
-    questions = get_topic_questions(topic_name)[:5]
     company_id = data.get('company_id') or request.args.get('company_id', type=int)
-    company_id = int(company_id) if company_id else 0
-    if company_id:
-        session_key = f'aptitude_session:{current_user.id}:{company_id}:{topic_name}'
-        question_keys = session.get(session_key, [])
-        questions = [item for item in get_topic_questions(topic_name) if item.get('question_key') in question_keys]
-        if len(questions) != 5:
-            return jsonify({'success': False, 'message': 'This test session has expired. Please start the topic again.'}), 400
-
+    company_id = int(company_id or current_user.dream_company_id or 0)
     topic = AptitudeTopic.query.filter_by(name=topic_name).first()
-    if not topic:
-        topic = AptitudeTopic(name=topic_name, description=APTITUDE_TOPICS[topic_name]['description'])
-        db.session.add(topic)
-        db.session.flush()
-    
+    if not topic or not company_id:
+        return jsonify({'success': False, 'message': 'A company and topic are required.'}), 400
+    session_key = f'aptitude_session:{current_user.id}:{company_id}:{topic_name}'
+    question_ids = session.get(session_key, [])
+    questions = AptitudeQuestion.query.filter(
+        AptitudeQuestion.id.in_(question_ids), AptitudeQuestion.company_id == company_id,
+        AptitudeQuestion.topic_id == topic.id
+    ).order_by(AptitudeQuestion.id).all() if question_ids else []
+    if len(questions) != 5:
+        question_ids = [item.get('id') for item in data.get('questions', []) if item.get('id') is not None]
+        questions = AptitudeQuestion.query.filter(
+            AptitudeQuestion.id.in_(question_ids), AptitudeQuestion.company_id == company_id,
+            AptitudeQuestion.topic_id == topic.id
+        ).order_by(AptitudeQuestion.id).all() if len(question_ids) == 5 else []
+    if len(questions) != 5:
+        return jsonify({'success': False, 'message': 'Unable to resume this aptitude test.'}), 400
+
     correct_count = 0
     wrong_count = 0
     
     for idx, question in enumerate(questions):
         selected_answer = answers.get(str(idx))
-        correct_answer = question['correct_answer']
+        correct_answer = question.correct_answer
+        existing = AptitudeQuestionAttempt.query.filter_by(
+            student_id=current_user.id, company_id=company_id, topic_id=topic.id,
+            question_key=str(question.id)
+        ).first()
+        if existing:
+            return jsonify({'success': False, 'message': 'This test has already been submitted.'}), 409
         
         if selected_answer == correct_answer:
             correct_count += 1
@@ -838,9 +1285,11 @@ def submit_aptitude_topic(topic_name):
                 student_id=current_user.id,
                 company_id=company_id,
                 topic_id=topic.id,
-                question_key=question.get('question_key', f'{topic_name}:{idx}'),
+                question_key=str(question.id),
                 selected_answer=selected_answer or '',
                 correct=selected_answer == correct_answer,
+                explanation=question.explanation,
+                concept_definition=question.concept_definition,
             ))
     
     percentage = (correct_count / len(questions)) * 100 if questions else 0
@@ -848,6 +1297,7 @@ def submit_aptitude_topic(topic_name):
     # Save to database
     attempt = AptitudeAttempt(
         student_id=current_user.id,
+        company_id=company_id,
         topic_id=topic.id,
         total_questions=len(questions),
         correct_answers=correct_count,
@@ -945,6 +1395,65 @@ def submit_general_aptitude():
     })
 
 
+@student_bp.route('/student/general-aptitude-extra')
+@login_required
+def general_aptitude_extra():
+    from placement_training.models import ExtraAptitudeAnswer
+    from placement_training.services.aptitude_topics_service import APTITUDE_TOPICS, get_extra_aptitude_questions, get_topic_questions
+
+    topic_name = request.args.get('topic')
+    existing_keys = set()
+    for topic in APTITUDE_TOPICS:
+        existing_keys.update(question['question_key'] for question in get_topic_questions(topic))
+    attempted_keys = {answer.question_key for answer in ExtraAptitudeAnswer.query.filter_by(student_id=current_user.id).all()}
+    questions = get_extra_aptitude_questions(topic_name, existing_keys | attempted_keys, 5)
+    if len(questions) < 5:
+        flash('No new extra questions are available for this selection yet.', 'info')
+        return redirect(url_for('student.aptitude_topics_list'))
+    session_key = f'extra_aptitude:{current_user.id}:{topic_name or "mixed"}'
+    session[session_key] = questions
+    session.modified = True
+    return render_template('general_aptitude_extra.html', questions=questions, total_questions=5, topic_name=topic_name)
+
+
+@student_bp.route('/student/general-aptitude-extra-submit', methods=['POST'])
+@login_required
+def submit_general_aptitude_extra():
+    from placement_training.models import ExtraAptitudeAnswer, ExtraAptitudeTest, GeneralAptitudeTest
+
+    data = request.get_json(silent=True) or {}
+    topic_name = data.get('topic')
+    session_key = f'extra_aptitude:{current_user.id}:{topic_name or "mixed"}'
+    questions = session.get(session_key, [])
+    answers = data.get('answers', {})
+    if len(questions) != 5 or any(str(index) not in answers for index in range(5)):
+        return jsonify({'success': False, 'message': 'Complete all five extra questions before submitting.'}), 400
+    if any(ExtraAptitudeAnswer.query.filter_by(student_id=current_user.id, question_key=question['question_key']).first() for question in questions):
+        return jsonify({'success': False, 'message': 'One or more extra questions were already attempted.'}), 409
+
+    correct_count = sum(answers.get(str(index)) == question['correct_answer'] for index, question in enumerate(questions))
+    extra = ExtraAptitudeTest(student_id=current_user.id, topic_name=topic_name, total_questions=5, correct_answers=correct_count, wrong_answers=5 - correct_count, score=correct_count, percentage=correct_count * 20)
+    db.session.add(extra)
+    db.session.flush()
+    for index, question in enumerate(questions):
+        selected = answers[str(index)]
+        db.session.add(ExtraAptitudeAnswer(
+            test_id=extra.id, student_id=current_user.id, question_key=question['question_key'], topic_name=question['topic'],
+            question_text=question['question'], selected_answer=selected, correct_answer=question['correct_answer'],
+            is_correct=selected == question['correct_answer'], explanation=question['explanation'], concept=question['concept'],
+        ))
+    db.session.commit()
+
+    general = GeneralAptitudeTest.query.filter_by(student_id=current_user.id, status='completed').order_by(GeneralAptitudeTest.completed_at.desc()).first()
+    general_total = general.total_questions if general else 0
+    general_correct = general.correct_answers if general else 0
+    total = general_total + 5
+    correct = general_correct + correct_count
+    wrong = total - correct
+    percentage = correct / total * 100 if total else 0
+    return jsonify({'success': True, 'extra_total': 5, 'extra_correct': correct_count, 'extra_wrong': 5 - correct_count, 'extra_score': correct_count, 'extra_percentage': correct_count * 20, 'total': total, 'correct': correct, 'wrong': wrong, 'score': correct, 'percentage': round(percentage, 2), 'progress': round(percentage, 2)})
+
+
 @student_bp.route('/student/group-discussion')
 @login_required
 def group_discussion_list():
@@ -958,8 +1467,6 @@ def group_discussion_list():
 @login_required
 def join_group_discussion(session_id):
     """Join a group discussion session"""
-    from placement_training.models import GroupDiscussionSession, GroupDiscussionParticipant
-    
     session = GroupDiscussionSession.query.get_or_404(session_id)
     
     # Check if already joined
@@ -969,11 +1476,15 @@ def join_group_discussion(session_id):
     ).first()
     
     if existing:
+        existing.left_at = None
+        existing.attendance_status = 'active'
+        db.session.commit()
         flash('You are already participating in this session.', 'info')
     else:
         participant = GroupDiscussionParticipant(
             session_id=session_id,
-            student_id=current_user.id
+            student_id=current_user.id,
+            attendance_status='active'
         )
         db.session.add(participant)
         db.session.commit()
@@ -986,8 +1497,6 @@ def join_group_discussion(session_id):
 @login_required
 def group_discussion_room(session_id):
     """Group discussion room with voice features"""
-    from placement_training.models import GroupDiscussionSession, GroupDiscussionParticipant
-    
     session = GroupDiscussionSession.query.get_or_404(session_id)
     
     # Check if student is a participant
@@ -1002,21 +1511,55 @@ def group_discussion_room(session_id):
     
     # Get all participants
     participants = GroupDiscussionParticipant.query.filter_by(session_id=session_id).all()
-    participant_students = [p.student for p in participants]
+    active_count = sum(
+        1 for participant in participants
+        if participant.attendance_status == 'active' and participant.left_at is None
+    )
     
     return render_template('group_discussion_room.html', 
                          session=session, 
-                         participants=participant_students,
+                         participants=participants,
+                         total_participants=len(participants),
+                         active_participants=active_count,
                          is_participant=True)
+
+
+@student_bp.route('/student/group-discussion/<int:session_id>/participants')
+@login_required
+def group_discussion_participants(session_id):
+    """Return the registered students for a discussion room."""
+    GroupDiscussionSession.query.get_or_404(session_id)
+    participants = GroupDiscussionParticipant.query.filter_by(
+        session_id=session_id
+    ).order_by(GroupDiscussionParticipant.joined_at.asc()).all()
+
+    registered_students = []
+    active_count = 0
+    for participant in participants:
+        status = participant.attendance_status or (
+            'offline' if participant.left_at else 'active'
+        )
+        is_active = status == 'active' and participant.left_at is None
+        active_count += int(is_active)
+        registered_students.append({
+            'student_id': participant.student_id,
+            'name': participant.student.name,
+            'status': status,
+            'is_current_user': participant.student_id == current_user.id,
+        })
+
+    return jsonify({
+        'success': True,
+        'total_participants': len(registered_students),
+        'active_participants': active_count,
+        'participants': registered_students,
+    })
 
 
 @student_bp.route('/student/group-discussion/<int:session_id>/leave', methods=['POST'])
 @login_required
 def leave_group_discussion(session_id):
     """Leave a group discussion session"""
-    from placement_training.models import GroupDiscussionParticipant
-    from datetime import datetime
-    
     participant = GroupDiscussionParticipant.query.filter_by(
         session_id=session_id,
         student_id=current_user.id
@@ -1024,6 +1567,7 @@ def leave_group_discussion(session_id):
     
     if participant:
         participant.left_at = datetime.utcnow()
+        participant.attendance_status = 'offline'
         db.session.commit()
         flash('You have left the discussion.', 'info')
     

@@ -106,6 +106,7 @@
                     <p id="result-status" style="color: var(--text-secondary); text-align: center; margin-top: 15px;">Completed</p>
                 </div>
                 <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+                    <a id="extraQuestionsLink" class="btn btn-warning" href="{{ url_for('student.general_aptitude_extra') }}" style="display: none;">Extra Questions</a>
                     <button type="button" class="btn btn-primary" onclick="window.location.href='{{ url_for('student.dashboard') }}'">Back to Dashboard</button>
                 </div>
             </div>
@@ -225,6 +226,7 @@ function submitTest() {
             document.getElementById('result-ratio').textContent = `${data.correct} / ${data.total} Correct`;
             document.getElementById('result-performance').textContent = `Performance Level: ${data.performance}`;
             document.getElementById('result-chart').style.background = `conic-gradient(#28a745 0deg ${data.correct / data.total * 360}deg, #dc3545 ${data.correct / data.total * 360}deg 360deg)`;
+            document.getElementById('extraQuestionsLink').style.display = 'inline-block';
             
             new bootstrap.Modal(document.getElementById('resultsModal')).show();
     })

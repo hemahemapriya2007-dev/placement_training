@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 
 from placement_training import db
-from placement_training.models import Student, Company, Skill, LearningPlan, Task, Test, Question, Progress, StudentTask, TestResult, AptitudeAttempt, GeneralAptitudeTest, GroupDiscussionResult
+from placement_training.models import Student, Company, Skill, LearningPlan, Task, Test, Question, Progress, StudentTask, TestResult, AptitudeAttempt, GeneralAptitudeTest, GroupDiscussionResult, AptitudeTopic, AptitudeQuestion
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -28,16 +28,26 @@ def dashboard():
     students = Student.query.all()
     companies = Company.query.count()
     tests = Test.query.count()
+    from placement_training.services.progress_service import calculate_student_progress, get_skill_progress
+    student_progress = {}
+    for student in students:
+        student_progress[student.id] = {
+            'company_name': student.dream_company.name if student.dream_company else None,
+            'skills': get_skill_progress(student.id, student.dream_company_id),
+            'overall': calculate_student_progress(student.id, student.dream_company_id).overall_progress
+            if student else 0,
+        }
     avg_progress = round(sum((p.overall_progress or 0) for p in Progress.query.all()) / len(Progress.query.all()), 2) if Progress.query.count() else 0
-    return render_template('admin_dashboard.html', students=students, companies=companies, tests=tests, avg_progress=avg_progress)
+    return render_template('admin_dashboard.html', students=students, companies=companies, tests=tests, avg_progress=avg_progress, student_progress=student_progress)
 
 
 @admin_bp.route('/admin/student/<int:student_id>')
 @admin_required
 def student_detail(student_id):
     student = Student.query.get_or_404(student_id)
-    from placement_training.services.progress_service import calculate_student_progress
-    progress = calculate_student_progress(student.id)
+    from placement_training.services.progress_service import calculate_student_progress, get_skill_progress
+    progress = calculate_student_progress(student.id, student.dream_company_id)
+    skill_progress = get_skill_progress(student.id, student.dream_company_id)
     selected_skills = student.student_skills
     completed_skills = [item for item in selected_skills if item.completed]
     pending_skills = [item for item in selected_skills if not item.completed]
@@ -53,6 +63,7 @@ def student_detail(student_id):
         'admin_student_detail.html',
         student=student,
         progress=progress,
+        skill_progress=skill_progress,
         selected_skills=selected_skills,
         completed_skills=completed_skills,
         pending_skills=pending_skills,
@@ -201,6 +212,49 @@ def create_test():
 def leaderboard():
     from placement_training.services.progress_service import get_leaderboard
     return render_template('admin_leaderboard.html', leaderboard=get_leaderboard())
+
+
+@admin_bp.route('/admin/aptitude-questions')
+@admin_required
+def aptitude_questions():
+    questions = AptitudeQuestion.query.order_by(AptitudeQuestion.company_id, AptitudeQuestion.topic_id, AptitudeQuestion.id).all()
+    return render_template('admin_aptitude_questions.html', questions=questions)
+
+
+@admin_bp.route('/admin/aptitude-question/create', methods=['GET', 'POST'])
+@admin_required
+def create_aptitude_question():
+    companies = Company.query.order_by(Company.name).all()
+    topics = AptitudeTopic.query.order_by(AptitudeTopic.name).all()
+    if request.method == 'POST':
+        question = AptitudeQuestion(
+            company_id=int(request.form['company_id']),
+            topic_id=int(request.form['topic_id']),
+            question_text=request.form['question_text'].strip(),
+            option_a=request.form['option_a'].strip(), option_b=request.form['option_b'].strip(),
+            option_c=request.form['option_c'].strip(), option_d=request.form['option_d'].strip(),
+            correct_answer=request.form['correct_answer'],
+            explanation=request.form.get('explanation', '').strip(),
+            concept_definition=request.form.get('concept_definition', '').strip(),
+            question_code=__import__('hashlib').sha256(
+                f'{request.form["company_id"]}:{request.form["topic_id"]}:{request.form["question_text"]}'.encode()
+            ).hexdigest()[:64],
+        )
+        db.session.add(question)
+        db.session.commit()
+        flash('Aptitude question added.', 'success')
+        return redirect(url_for('admin.aptitude_questions'))
+    return render_template('admin_aptitude_question_form.html', companies=companies, topics=topics)
+
+
+@admin_bp.route('/admin/aptitude-question/delete/<int:question_id>', methods=['POST'])
+@admin_required
+def delete_aptitude_question(question_id):
+    question = AptitudeQuestion.query.get_or_404(question_id)
+    db.session.delete(question)
+    db.session.commit()
+    flash('Aptitude question deleted. Existing attempt records were retained.', 'success')
+    return redirect(url_for('admin.aptitude_questions'))
 
 
 # ==================== INITIALIZATION ROUTES ====================

@@ -24,16 +24,29 @@
     <div class="row g-4">
         {% for topic, description in topics %}
         <div class="col-md-6 col-lg-4">
-            <div class="card border-0 p-4 topic-card" style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)); cursor: pointer; transition: transform 0.3s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'" onclick="window.location.href='{{ url_for('student.aptitude_topic_test', topic_name=topic, company_id=company.id if company else None) }}'">
+            <div class="card border-0 p-4 topic-card" style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)); cursor: pointer; transition: transform 0.3s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'" onclick="window.location.href='{{ url_for('student.general_aptitude_topic', topic_name=topic) }}'">
                 <div class="card-body">
                     <h5 style="color: white; font-weight: 700; margin-bottom: 10px;">{{ topic }}</h5>
                     <p style="color: rgba(255,255,255,0.9); font-size: 0.85rem; margin-bottom: 15px;">{{ description }}</p>
-                    <p style="color: rgba(255,255,255,0.8); font-size: 0.8rem; margin-bottom: 10px;">5 Questions • 10 minutes</p>
+                    <p style="color: rgba(255,255,255,0.8); font-size: 0.8rem; margin-bottom: 10px;">10 Questions • 10 minutes</p>
                     <button class="btn btn-light btn-sm">Practice Now</button>
                 </div>
             </div>
         </div>
         {% endfor %}
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-md-6 col-lg-4">
+            <div class="card border-0 p-4 topic-card" style="background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan)); cursor: pointer;" onclick="window.location.href='{{ url_for('student.general_aptitude_topic', topic_name='General') }}'">
+                <div class="card-body">
+                    <h5 style="color: white; font-weight: 700; margin-bottom: 10px;">General</h5>
+                    <p style="color: rgba(255,255,255,0.9); font-size: 0.85rem; margin-bottom: 15px;">Mixed Aptitude Topics</p>
+                    <p style="color: rgba(255,255,255,0.8); font-size: 0.8rem; margin-bottom: 10px;">10 Questions • 10 minutes</p>
+                    <button class="btn btn-light btn-sm">Practice Now</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="mt-5 mb-5">
